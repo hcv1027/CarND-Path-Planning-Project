@@ -1,12 +1,14 @@
-#include <uWS/uWS.h>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
+#include "spline.h"
+#include "vehicle.h"
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <uWS/uWS.h>
+#include <vector>
 
 // for convenience
 using nlohmann::json;
@@ -50,10 +52,15 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
-              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
-               uWS::OpCode opCode) {
+  // Initialize out ego vehicle
+  Vehicle ego_vehicle;
+  ego_vehicle.set_map(map_waypoints_x, map_waypoints_y, map_waypoints_s,
+                      map_waypoints_dx, map_waypoints_dy);
+
+  h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s,
+               &map_waypoints_dx, &map_waypoints_dy,
+               &ego_vehicle](uWS::WebSocket<uWS::SERVER> ws, char *data,
+                             size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -63,30 +70,61 @@ int main() {
 
       if (s != "") {
         auto j = json::parse(s);
-        
+
         string event = j[0].get<string>();
-        
+
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          
+
           // Main car's localization Data
           double car_x = j[1]["x"];
           double car_y = j[1]["y"];
           double car_s = j[1]["s"];
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
-          double car_speed = j[1]["speed"];
+          double car_speed = j[1]["speed"]; // Unit is MPH
 
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
           auto previous_path_y = j[1]["previous_path_y"];
-          // Previous path's end s and d values 
+          std::vector<std::vector<double>> prev_path;
+          for (int i = 0; i < previous_path_x.size(); ++i) {
+            std::vector<double> point;
+            point.push_back(previous_path_x[i]);
+            point.push_back(previous_path_y[i]);
+            prev_path.push_back(point);
+          }
+          std::cout << "--------------------" << std::endl;
+          std::cout << "prev_path size: " << prev_path.size() << std::endl;
+          // Previous path's end s and d values
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
 
-          // Sensor Fusion Data, a list of all other cars on the same side 
+          // Sensor Fusion Data, a list of all other cars on the same side
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
+          vector<Vehicle> traffics;
+          for (auto each : sensor_fusion) {
+            // The max speed is 50 MPH = 22.352 meter/second.
+            // I'll predict the vehicle's trajectory in 3 seconds.
+            // 3 * 22.352 = 67.056, So I set MAX_DISTANCE = 68.0.
+            const double MAX_DISTANCE = 68.0;
+            int id = each[0];
+            double x = each[1];
+            double y = each[2];
+            double x_vel = each[3];
+            double y_vel = each[4];
+            double s = each[5];
+            double d = each[6];
+            int lane = get_lane_from_d(d);
+            double dis = distance(car_x, car_y, x, y);
+            if (lane >= 0 && dis <= MAX_DISTANCE) {
+              Vehicle vehicle(id, x, y, x_vel, y_vel, s, d, lane);
+              vehicle.set_map(map_waypoints_x, map_waypoints_y, map_waypoints_s,
+                              map_waypoints_dx, map_waypoints_dy);
+              traffics.push_back(vehicle);
+            }
+          }
 
           json msgJson;
 
@@ -97,21 +135,24 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
-
+          ego_vehicle.update_state(car_x, car_y, car_s, car_d, car_yaw,
+                                   mph2ms(car_speed));
+          ego_vehicle.get_trajectory(next_x_vals, next_y_vals, prev_path,
+                                     end_path_s, end_path_d, traffics);
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
-          auto msg = "42[\"control\","+ msgJson.dump()+"]";
+          auto msg = "42[\"control\"," + msgJson.dump() + "]";
 
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-        }  // end "telemetry" if
+        } // end "telemetry" if
       } else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
-    }  // end websocket if
+    } // end websocket if
   }); // end h.onMessage
 
   h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
@@ -131,6 +172,6 @@ int main() {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }
-  
+
   h.run();
 }
