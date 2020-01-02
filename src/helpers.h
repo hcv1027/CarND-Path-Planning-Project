@@ -44,7 +44,7 @@ double distance(double x1, double y1, double x2, double y2) {
 // Calculate closest waypoint to current x, y position
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
                     const vector<double> &maps_y) {
-  double closestLen = 100000;  // large number
+  double closestLen = 100000; // large number
   int closestWaypoint = 0;
 
   for (int i = 0; i < maps_x.size(); ++i) {
@@ -157,10 +157,10 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
 }
 
 // Convert mile/hour to meter/second
-double mph2ms(double mph) { return mph * 0.44704; }
+inline double mph2ms(double mph) { return mph * 0.44704; }
 
 // Convert meter/second to mile/hour
-double ms2mph(double ms) { return ms * 2.2369; }
+inline double ms2mph(double ms) { return ms * 2.2369; }
 
 // Infer the lane's id by vehicle's d value
 int get_lane_from_d(double d) {
@@ -183,6 +183,42 @@ double round_frenet_s(double s) {
   return s;
 }
 
-}  // namespace
+vector<double> derivative(vector<double> coeff) {
+  vector<double> derivative_coeffs;
+  for (int i = 1; i < coeff.size(); i++) {
+    derivative_coeffs.push_back(i * coeff[i]);
+  }
+  return derivative_coeffs;
+}
 
-#endif  // HELPERS_H
+double poly_eval(double x, vector<double> coeffs) {
+  double result = 0.0;
+  double t = 1.0;
+  for (int i = 0; i < coeffs.size(); i++) {
+    result += coeffs[i] * t;
+    t *= x;
+  }
+  return result;
+}
+
+double TIME_STEP = 0.02;
+// check whether the JMT coefficients will break the car limits
+// within check_duration
+/* bool check_is_s_JMT_good(vector<double> jmt_coeffs, double check_duration) {
+  auto v_coeffs = derivative(jmt_coeffs);
+  auto a_coeffs = derivative(v_coeffs);
+  auto jerk_coeffs = derivative(a_coeffs);
+  for (double t = TIME_STEP; t <= check_duration; t += TIME_STEP) {
+    double v = poly_eval(t, v_coeffs);
+    double a = abs(poly_eval(t, a_coeffs));
+    double jerk = abs(poly_eval(t, jerk_coeffs));
+    if (v > SPEED_LIMIT || v < 0.0 || a > MAX_ACC || jerk > MAX_JERK) {
+      return false;
+    }
+  }
+  return true;
+} */
+
+} // namespace
+
+#endif // HELPERS_H

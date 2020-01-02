@@ -1,10 +1,10 @@
 #include "vehicle.h"
-#include <algorithm>
-#include <iostream>
-#include <limits>
 #include "Eigen-3.3/Eigen/Dense"
 #include "helpers.h"
 #include "spline.h"
+#include <algorithm>
+#include <iostream>
+#include <limits>
 
 using Eigen::Matrix3d;
 using Eigen::MatrixXd;
@@ -22,18 +22,18 @@ const double Vehicle::LANE_WIDTH = 4.0;
 const double Vehicle::MAX_S = 6945.554;
 const double Vehicle::COLLISION_THRESHOLD = 10.0;
 const double Vehicle::PREDICTION_TIME = 1.0;
+const double Vehicle::TIME_STEP = 0.02;
 
 Vehicle::Vehicle() {
   s_vel_ = 0.0;
   d_vel_ = 0.0;
   s_acc_ = 0.0;
   d_acc_ = 0.0;
-  prev_path_size_ = 0;
   state_ = "CS";
 }
 
 Vehicle::Vehicle(int id, double x, double y, double x_vel, double y_vel,
-                 double s, double d, int lane) {
+                 double s, double d) {
   id_ = id;
   x_ = x;
   y_ = y;
@@ -41,7 +41,7 @@ Vehicle::Vehicle(int id, double x, double y, double x_vel, double y_vel,
   y_vel_ = y_vel;
   s_ = s;
   d_ = d;
-  lane_ = lane;
+  lane_ = get_lane_from_d(d);
 }
 
 void Vehicle::show_info() {
@@ -62,86 +62,20 @@ void Vehicle::set_map(const std::vector<double> &map_waypoints_x,
 }
 
 void Vehicle::update_state(double x, double y, double s, double d, double yaw,
-                           double speed, int prev_path_size) {
-  /* if (speed != 0.0) {
-    double next_x = x + speed * cos(yaw);
-    double next_y = y + speed * sin(yaw);
-    vector<double> next_frenet =
-        getFrenet(next_x, next_y, yaw, map_waypoints_x_, map_waypoints_y_);
-    double old_s_vel = s_vel_;
-    double old_d_vel = d_vel_;
-    s_vel_ = (next_frenet[0] - s_);
-    d_vel_ = (next_frenet[1] - d_);
-    s_acc_ = (s_vel_ - old_s_vel);
-    d_acc_ = (d_vel_ - old_d_vel);
-    cout << "s_vel: " << s_vel_ << ", d_vel: " << d_vel_ << endl;
-    cout << "s_acc: " << s_acc_ << ", d_acc: " << d_acc_ << endl;
-  } */
-
+                           double speed) {
   x_ = x;
   y_ = y;
   s_ = s;
   d_ = d;
   yaw_ = yaw;
   speed_ = speed;
-  cout << "curr s: " << s_ << endl;
-
-  /* auto compute_ds = [](double curr_s, double prev_s) {
-    cout << "curr_s: " << curr_s << ", prev_s: " << prev_s << endl;
-    if (prev_s >= 6900.0 && curr_s <= 100.0) {
-      return MAX_S - prev_s + curr_s;
-    } else {
-      return curr_s - prev_s;
-    }
-    // return (curr_s >= prev_s) ? (curr_s - prev_s) : (MAX_S - prev_s +
-    // curr_s);
-  };
-
-  if (frenet_history_.size() == FRENET_HISTORY_SIZE) {
-    frenet_history_.pop_front();
-  }
-  std::vector<double> record(3, 0.0);
-  record[0] = 0.02 * (prev_path_size_ - prev_path_size);
-  cout << "prev_path_size_: " << prev_path_size_
-       << ", prev_path_size:" << prev_path_size << endl;
-  // record[0] = 0.02;
-  record[1] = s;
-  record[2] = d;
-  if (record[0] > 0) {
-    frenet_history_.push_back(record);
-    if (frenet_history_.size() == 2) {
-      // Only update velocity
-      std::vector<double> &prev_record = *(frenet_history_.begin());
-      s_vel_ = compute_ds(record[1], prev_record[1]) / record[0];
-      d_vel_ = (record[2] - prev_record[2]) / record[0];
-      cout << "dt: " << record[0] << ", s_vel: " << s_vel_
-           << ", d_vel: " << d_vel_ << endl;
-    } else if (frenet_history_.size() == 3) {
-      // Update both velocity and accleration
-      auto iter = frenet_history_.begin();
-      std::vector<double> &prev_record_0 = *(iter++);
-      std::vector<double> &prev_record_1 = *(iter);
-      double old_s_vel = s_vel_;
-      double old_d_vel = d_vel_;
-      s_vel_ = compute_ds(record[1], prev_record_1[1]) / record[0];
-      d_vel_ = (record[2] - prev_record_1[2]) / record[0];
-      s_acc_ = (s_vel_ - old_s_vel) / record[0];
-      d_acc_ = (d_vel_ - old_d_vel) / record[0];
-      // cout << "record_0: " << prev_record_0[1] << endl;
-      // cout << "record_1: " << prev_record_1[1] << endl;
-      cout << "dt: " << record[0] << ", s_vel: " << s_vel_
-           << ", d_vel: " << d_vel_ << endl;
-      cout << "dt: " << record[0] << ", s_acc: " << s_acc_
-           << ", d_acc: " << d_acc_ << endl;
-    }
-  } */
   lane_ = get_lane_from_d(d);
+  //   cout << "curr s: " << s_ << endl;
 }
 
 void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
                              std::vector<double> &next_y_vals,
-                             const std::vector<std::vector<double>> &prev_path,
-                             double end_path_s, double end_path_d,
+                             int prev_path_size,
                              const std::vector<Vehicle> &traffics) {
   next_x_vals.clear();
   next_y_vals.clear();
@@ -155,18 +89,23 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   cout << "We are in " << get_lane_from_d(d_) << " lane"
        << ", s: " << s_ << ", d: " << d_ << endl; */
 
-  std::vector<std::string> next_states = successor_states();
-  std::vector<double> costs;
-  std::vector<std::vector<Vehicle>> trajectries;
-  std::unordered_map<int, std::vector<Vehicle>> predictions;
+  // Generate traffic prediction
+  std::unordered_map<int, vector<vector<double>>> predictions;
   // cout << "traffics size: " << traffics.size() << endl;
   for (Vehicle vehicle : traffics) {
-    predictions.insert(std::make_pair(vehicle.id_, vehicle.get_prediction()));
+    // predictions.insert(std::make_pair(vehicle.id_,
+    // vehicle.get_prediction()));
+    predictions[vehicle.id_] = vehicle.get_prediction();
   }
+
+  std::vector<std::string> next_states = successor_states();
+  std::vector<double> costs;
+  std::vector<vector<vector<double>>> trajectries;
+
   // cout << "predictions complete" << endl;
   for (std::string state : next_states) {
-    std::vector<Vehicle> trajectory =
-        generate_trajectory(state, predictions, prev_path);
+    vector<vector<double>> trajectory =
+        generate_trajectory(state, predictions, prev_path_size);
     if (trajectory.size() > 0) {
       double cost = 0.0;
       costs.push_back(cost);
@@ -187,31 +126,16 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   }
   // cout << "best_trajectory_idx:" << best_trajectory_idx << std::endl;
 
-  std::vector<Vehicle> &best_trajectory = trajectries[best_trajectory_idx];
-  for (int i = 0; i < best_trajectory.size(); ++i) {
-    Vehicle &vehicle = best_trajectory[i];
-    double dist = 0.0;
-    if (i == 0) {
-      dist = distance(vehicle.x_, vehicle.y_, x_, y_);
-    } else {
-      Vehicle &vehicle_1 = best_trajectory[i - 1];
-      dist = distance(vehicle.x_, vehicle.y_, vehicle_1.x_, vehicle_1.y_);
-    }
-    printf("s: %f, xy: (%f, %f), dist: %f, vel: %f\n", vehicle.s_, vehicle.x_,
-           vehicle.y_, dist, dist / 0.02);
-    // printf("Final trajectory: %f, %f\n", best_trajectory[i].x(),
-    // best_trajectory[i].y());
-    next_x_vals.push_back(best_trajectory[i].x());
-    next_y_vals.push_back(best_trajectory[i].y());
+  prev_trajectory_s_ = trajectries[best_trajectory_idx][0];
+  prev_trajectory_d_ = trajectries[best_trajectory_idx][1];
+  for (int i = 0; i < prev_trajectory_s_.size(); ++i) {
+    double s = prev_trajectory_s_[i];
+    double d = prev_trajectory_d_[i];
+    vector<double> xy =
+        getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+    next_x_vals.push_back(xy[0]);
+    next_y_vals.push_back(xy[1]);
   }
-  prev_path_size_ = next_x_vals.size();
-
-  // Just for test
-  /* double dist_inc = 0.5;
-  for (int i = 0; i < 50; ++i) {
-    next_x_vals.push_back(x_ + (dist_inc * i) * cos(deg2rad(yaw_)));
-    next_y_vals.push_back(y_ + (dist_inc * i) * sin(deg2rad(yaw_)));
-  } */
 }
 
 std::vector<std::string> Vehicle::successor_states() {
@@ -239,61 +163,59 @@ std::vector<std::string> Vehicle::successor_states() {
   return states;
 }
 
-std::vector<Vehicle> Vehicle::get_prediction(double delta_time) {
-  double dt = 0.1;
+std::vector<std::vector<double>> Vehicle::get_prediction() {
+  double dt = TIME_STEP;
   double elapsed_time = 0.0;
-  std::vector<Vehicle> trajectory;
-  trajectory.push_back(Vehicle(id_, x_, y_, x_vel_, y_vel_, s_, d_, lane_));
+  vector<vector<double>> prediction;
+  prediction.push_back({s_, d_});
   double x = x_;
   double y = y_;
   do {
-    if (dt + elapsed_time > delta_time) {
-      dt = delta_time - elapsed_time;
+    if (dt + elapsed_time > PREDICTION_TIME) {
+      dt = PREDICTION_TIME - elapsed_time;
     }
     double next_x = x + x_vel_ * dt;
     double next_y = y + y_vel_ * dt;
-    double next_yaw = atan2(y - next_y, x - next_x);
-    auto next_frenet =
+    double next_yaw = atan2(next_y - y, next_x - x);
+    vector<double> next_sd =
         getFrenet(next_x, next_y, next_yaw, map_waypoints_x_, map_waypoints_y_);
-    Vehicle vehicle(id_, next_x, next_y, x_vel_, y_vel_, next_frenet[0],
-                    next_frenet[1], get_lane_from_d(next_frenet[1]));
-    trajectory.push_back(vehicle);
+    prediction.push_back(next_sd);
     x = next_x;
     y = next_y;
     elapsed_time += dt;
-  } while (elapsed_time < delta_time);
+  } while (elapsed_time < PREDICTION_TIME);
 
-  return trajectory;
+  return prediction;
 }
 
-std::vector<Vehicle> Vehicle::generate_trajectory(
+vector<vector<double>> Vehicle::generate_trajectory(
     std::string state,
-    std::unordered_map<int, std::vector<Vehicle>> &prediction,
-    const std::vector<std::vector<double>> &prev_path) {
-  std::vector<Vehicle> trajectory;
-  if (state.compare("CS") == 0) {
-    return constant_speed_trajectory(prediction, prev_path);
-  } else if (state.compare("KL") == 0) {
-    return keep_lane_trajectory(prediction, prev_path);
-  } else if (state.compare("PLCL") == 0 || state.compare("PLCR") == 0) {
-    return prep_lane_change_trajectory(prediction, prev_path);
+    std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
+    int prev_path_size) {
+  vector<vector<double>> trajectory;
+  if (state.compare("KL") == 0) {
+    return keep_lane_trajectory(prediction, prev_path_size);
   } else if (state.compare("LCL") == 0 || state.compare("LCR") == 0) {
-    return lane_change_trajectory(prediction, prev_path);
+    return lane_change_trajectory(prediction, prev_path_size);
   }
   return trajectory;
 }
 
-std::vector<Vehicle> Vehicle::constant_speed_trajectory(
-    std::unordered_map<int, std::vector<Vehicle>> &prediction,
-    const std::vector<std::vector<double>> &prev_path) {
-  std::vector<Vehicle> trajectory;
-  return trajectory;
+vector<vector<double>> Vehicle::generate_trajectory_to_lane(
+    int lane, unordered_map<int, vector<vector<double>>> &prediction,
+    int prev_path_size) {
+  for (int i = 0; i < prev_path_size; ++i) {
+    prev_trajectory_s_;
+  }
+  vector<double> trajectory_s;
+  vector<double> trajectory_d;
+  return {trajectory_s, trajectory_d};
 }
 
-std::vector<Vehicle> Vehicle::keep_lane_trajectory(
-    std::unordered_map<int, std::vector<Vehicle>> &prediction,
-    const std::vector<std::vector<double>> &prev_path) {
-  std::vector<Vehicle> trajectory;
+std::vector<std::vector<double>> Vehicle::keep_lane_trajectory(
+    std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
+    int prev_path_size) {
+  vector<vector<double>> trajectory;
   double ave_speed = speed_;
   /* if (prev_path.size() >= 2) {
     int prev_sample = 0;
@@ -331,7 +253,7 @@ std::vector<Vehicle> Vehicle::keep_lane_trajectory(
   } */
 
   double rev_vel = std::min(MAX_VEL * 0.9, speed_ + 1.0);
-  rev_vel = MAX_VEL * 0.5;
+  rev_vel = MAX_VEL * 0.4;
 
   // Choose next_s
   double next_s;
@@ -358,7 +280,7 @@ std::vector<Vehicle> Vehicle::keep_lane_trajectory(
   }
   vector<double> end(3, 0.0);
   end[0] = start[0] + rev_vel * PREDICTION_TIME +
-           0.5 * start[2] * PREDICTION_TIME * PREDICTION_TIME;
+           0.5 * start[2] * std::pow(PREDICTION_TIME, 2);
   end[1] = rev_vel;
   end[2] = start[2];
   cout << "From " << start[0] << " to " << end[0] << endl;
@@ -382,7 +304,7 @@ std::vector<Vehicle> Vehicle::keep_lane_trajectory(
     vector<double> xy = getXY(s_sample, d_, map_waypoints_s_, map_waypoints_x_,
                               map_waypoints_y_);
     // printf("(%f, %f)", xy[0], xy[1]);
-    Vehicle vehicle(id_, xy[0], xy[1], 0.0, 0.0, s_sample, d_, lane_);
+    Vehicle vehicle(id_, xy[0], xy[1], 0.0, 0.0, s_sample, d_);
     trajectory.push_back(vehicle);
     dt += 0.02;
   } while (dt <= PREDICTION_TIME /* && trajectory.size() <= 100 */);
@@ -438,17 +360,10 @@ std::vector<Vehicle> Vehicle::keep_lane_trajectory(
   return trajectory;
 }
 
-std::vector<Vehicle> Vehicle::prep_lane_change_trajectory(
-    std::unordered_map<int, std::vector<Vehicle>> &prediction,
-    const std::vector<std::vector<double>> &prev_path) {
-  std::vector<Vehicle> trajectory;
-  return trajectory;
-}
-
-std::vector<Vehicle> Vehicle::lane_change_trajectory(
-    std::unordered_map<int, std::vector<Vehicle>> &prediction,
-    const std::vector<std::vector<double>> &prev_path) {
-  std::vector<Vehicle> trajectory;
+std::vector<std::vector<double>> Vehicle::lane_change_trajectory(
+    std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
+    int prev_path_size) {
+  vector<vector<double>> trajectory;
   return trajectory;
 }
 
@@ -495,8 +410,9 @@ int Vehicle::get_vehicle_ahead(
   return id;
 }
 
-std::vector<double> Vehicle::jerk_minimize_trajectory(
-    std::vector<double> &start, std::vector<double> &end, double dt) {
+std::vector<double>
+Vehicle::jerk_minimize_trajectory(std::vector<double> &start,
+                                  std::vector<double> &end, double dt) {
   /**
    * Calculate the Jerk Minimizing Trajectory that connects the initial state
    * to the final state in time dt.

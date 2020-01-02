@@ -1,19 +1,21 @@
-#include <uWS/uWS.h>
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
 #include "spline.h"
 #include "vehicle.h"
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <uWS/uWS.h>
+#include <unordered_map>
+#include <vector>
 
 // for convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
+using std::unordered_map;
 
 int main() {
   uWS::Hub h;
@@ -81,7 +83,7 @@ int main() {
           double car_s = j[1]["s"];
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
-          double car_speed = j[1]["speed"];  // Unit is MPH
+          double car_speed = j[1]["speed"]; // Unit is MPH
           printf("curr xy: (%f, %f), speed: %f\n", car_x, car_y,
                  mph2ms(car_speed));
 
@@ -115,12 +117,13 @@ int main() {
             double y = each[2];
             double x_vel = each[3];
             double y_vel = each[4];
+            // double speed = std::sqrt(x_vel * x_vel + y_vel * y_vel);
             double s = each[5];
             double d = each[6];
-            int lane = get_lane_from_d(d);
+            // int lane = get_lane_from_d(d);
             double dis = distance(car_x, car_y, x, y);
-            if (lane >= 0 && dis <= MAX_DISTANCE) {
-              Vehicle vehicle(id, x, y, x_vel, y_vel, s, d, lane);
+            if (/* lane >= 0 &&  */ dis <= MAX_DISTANCE) {
+              Vehicle vehicle(id, x, y, x_vel, y_vel, s, d);
               vehicle.set_map(map_waypoints_x, map_waypoints_y, map_waypoints_s,
                               map_waypoints_dx, map_waypoints_dy);
               traffics.push_back(vehicle);
@@ -137,9 +140,9 @@ int main() {
            *   sequentially every .02 seconds
            */
           ego_vehicle.update_state(car_x, car_y, car_s, car_d, deg2rad(car_yaw),
-                                   mph2ms(car_speed), prev_path.size());
-          ego_vehicle.get_trajectory(next_x_vals, next_y_vals, prev_path,
-                                     end_path_s, end_path_d, traffics);
+                                   mph2ms(car_speed));
+          ego_vehicle.get_trajectory(next_x_vals, next_y_vals,
+                                     previous_path_x.size(), traffics);
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
@@ -147,14 +150,14 @@ int main() {
           auto msg = "42[\"control\"," + msgJson.dump() + "]";
 
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-        }  // end "telemetry" if
+        } // end "telemetry" if
       } else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
-    }  // end websocket if
-  });  // end h.onMessage
+    } // end websocket if
+  }); // end h.onMessage
 
   h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
