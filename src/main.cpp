@@ -114,7 +114,7 @@ int main() {
           // Sensor Fusion Data, a list of all other cars on the same side
           //   of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
-          vector<Vehicle> traffics;
+          unordered_map<int, Vehicle> traffics;
           for (auto each : sensor_fusion) {
             // The max speed is 50 MPH = 22.352 meter/second.
             // I'll predict the vehicle's trajectory in 3 seconds.
@@ -134,7 +134,7 @@ int main() {
               Vehicle vehicle(id, x, y, x_vel, y_vel, s, d);
               vehicle.set_map(map_waypoints_x, map_waypoints_y, map_waypoints_s,
                               map_waypoints_dx, map_waypoints_dy);
-              traffics.push_back(vehicle);
+              traffics.insert(std::make_pair(id, vehicle));
             }
           }
 
