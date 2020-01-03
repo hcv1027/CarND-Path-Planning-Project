@@ -1,10 +1,10 @@
 #include "vehicle.h"
-#include "Eigen-3.3/Eigen/Dense"
-#include "helpers.h"
-#include "spline.h"
 #include <algorithm>
 #include <iostream>
 #include <limits>
+#include "Eigen-3.3/Eigen/Dense"
+#include "helpers.h"
+#include "spline.h"
 
 using Eigen::Matrix3d;
 using Eigen::MatrixXd;
@@ -204,11 +204,32 @@ vector<vector<double>> Vehicle::generate_trajectory(
 vector<vector<double>> Vehicle::generate_trajectory_to_lane(
     int lane, unordered_map<int, vector<vector<double>>> &prediction,
     int prev_path_size) {
-  for (int i = 0; i < prev_path_size; ++i) {
-    prev_trajectory_s_;
-  }
+  int used = prev_trajectory_s_.size() - prev_path_size;
   vector<double> trajectory_s;
   vector<double> trajectory_d;
+  trajectory_s.insert(
+      trajectory_s.begin(),
+      prev_trajectory_s_.begin() + (prev_trajectory_s_.size() - prev_path_size),
+      prev_trajectory_s_.end());
+  trajectory_d.insert(
+      trajectory_d.begin(),
+      prev_trajectory_d_.begin() + (prev_trajectory_d_.size() - prev_path_size),
+      prev_trajectory_d_.end());
+
+  vector<double> start_s(3, 0.0);
+  vector<double> end_s(3, 0.0);
+  vector<double> start_d(3, 0.0);
+  vector<double> end_d(3, 0.0);
+  if (trajectory_s.size() <= 2) {
+    start_s[0] = s_;
+    start_s[1] = speed_;
+    start_s[2] = 0.0;
+    start_d[0] = d_;
+    start_d[1] = 0.0;
+    start_d[2] = 0.0;
+  } else {
+  }
+
   return {trajectory_s, trajectory_d};
 }
 
@@ -252,62 +273,62 @@ std::vector<std::vector<double>> Vehicle::keep_lane_trajectory(
     ave_speed = ave_speed / prev_sample;
   } */
 
-  double rev_vel = std::min(MAX_VEL * 0.9, speed_ + 1.0);
-  rev_vel = MAX_VEL * 0.4;
+  // double rev_vel = std::min(MAX_VEL * 0.9, speed_ + 1.0);
+  // rev_vel = MAX_VEL * 0.4;
 
-  // Choose next_s
-  double next_s;
+  // // Choose next_s
+  // double next_s;
 
-  // rev_vel = MAX_VEL;
-  cout << "rev_vel: " << rev_vel << endl;
-  vector<double> start(3, 0.0);
-  if (trajectory.empty()) {
-    start[0] = s_;
-    start[1] = speed_;
-    start[2] = 5.0;
-  } else {
-    Vehicle &last_0 = trajectory[trajectory.size() - 1];
-    Vehicle &last_1 = trajectory[trajectory.size() - 2];
-    double yaw = atan2(last_0.y_ - last_1.y_, last_0.x_ - last_1.x_);
-    vector<double> sd = getFrenet(last_0.x_, last_0.y_, yaw, map_waypoints_x_,
-                                  map_waypoints_y_);
-    start[0] = sd[0];
-    start[1] = ave_speed;
-    if (ave_speed < 0.7 * MAX_VEL) {
-      start[2] = 2.0;
-    }
-    printf("ave_speed: %f, acc: %f\n", ave_speed, start[2]);
-  }
-  vector<double> end(3, 0.0);
-  end[0] = start[0] + rev_vel * PREDICTION_TIME +
-           0.5 * start[2] * std::pow(PREDICTION_TIME, 2);
-  end[1] = rev_vel;
-  end[2] = start[2];
-  cout << "From " << start[0] << " to " << end[0] << endl;
-  vector<double> params = jerk_minimize_trajectory(start, end, PREDICTION_TIME);
-  vector<double> s_sample;
-  double dt = 0.02;
-  do {
-    double t1 = dt;
-    double t2 = pow(t1, 2);
-    double t3 = pow(t1, 3);
-    double t4 = pow(t1, 4);
-    double t5 = pow(t1, 5);
-    double s_sample = params[0] + params[1] * t1 + params[2] * t2 +
-                      params[3] * t3 + params[4] * t4 + params[5] * t5;
+  // // rev_vel = MAX_VEL;
+  // cout << "rev_vel: " << rev_vel << endl;
+  // vector<double> start(3, 0.0);
+  // if (trajectory.empty()) {
+  //   start[0] = s_;
+  //   start[1] = speed_;
+  //   start[2] = 5.0;
+  // } else {
+  //   Vehicle &last_0 = trajectory[trajectory.size() - 1];
+  //   Vehicle &last_1 = trajectory[trajectory.size() - 2];
+  //   double yaw = atan2(last_0.y_ - last_1.y_, last_0.x_ - last_1.x_);
+  //   vector<double> sd = getFrenet(last_0.x_, last_0.y_, yaw,
+  //   map_waypoints_x_,
+  //                                 map_waypoints_y_);
+  //   start[0] = sd[0];
+  //   start[1] = ave_speed;
+  //   if (ave_speed < 0.7 * MAX_VEL) {
+  //     start[2] = 2.0;
+  //   }
+  //   printf("ave_speed: %f, acc: %f\n", ave_speed, start[2]);
+  // }
+  // vector<double> end(3, 0.0);
+  // end[0] = start[0] + rev_vel * PREDICTION_TIME +
+  //          0.5 * start[2] * std::pow(PREDICTION_TIME, 2);
+  // end[1] = rev_vel;
+  // end[2] = start[2];
+  // cout << "From " << start[0] << " to " << end[0] << endl;
+  // vector<double> params = jerk_minimize_trajectory(start, end,
+  // PREDICTION_TIME); vector<double> s_sample; double dt = 0.02; do {
+  //   double t1 = dt;
+  //   double t2 = pow(t1, 2);
+  //   double t3 = pow(t1, 3);
+  //   double t4 = pow(t1, 4);
+  //   double t5 = pow(t1, 5);
+  //   double s_sample = params[0] + params[1] * t1 + params[2] * t2 +
+  //                     params[3] * t3 + params[4] * t4 + params[5] * t5;
 
-    /* if (i == 0) {
-      cout << "sample[0]: " << s_sample << endl;
-    } else if (i == 29) {
-      cout << "sample[29]: " << s_sample << endl;
-    } */
-    vector<double> xy = getXY(s_sample, d_, map_waypoints_s_, map_waypoints_x_,
-                              map_waypoints_y_);
-    // printf("(%f, %f)", xy[0], xy[1]);
-    Vehicle vehicle(id_, xy[0], xy[1], 0.0, 0.0, s_sample, d_);
-    trajectory.push_back(vehicle);
-    dt += 0.02;
-  } while (dt <= PREDICTION_TIME /* && trajectory.size() <= 100 */);
+  //   /* if (i == 0) {
+  //     cout << "sample[0]: " << s_sample << endl;
+  //   } else if (i == 29) {
+  //     cout << "sample[29]: " << s_sample << endl;
+  //   } */
+  //   vector<double> xy = getXY(s_sample, d_, map_waypoints_s_,
+  //   map_waypoints_x_,
+  //                             map_waypoints_y_);
+  //   // printf("(%f, %f)", xy[0], xy[1]);
+  //   Vehicle vehicle(id_, xy[0], xy[1], 0.0, 0.0, s_sample, d_);
+  //   trajectory.push_back(vehicle);
+  //   dt += 0.02;
+  // } while (dt <= PREDICTION_TIME /* && trajectory.size() <= 100 */);
 
   /* int next_waypoint =
       NextWaypoint(x_, y_, yaw_, map_waypoints_x_, map_waypoints_y_);
@@ -410,9 +431,8 @@ int Vehicle::get_vehicle_ahead(
   return id;
 }
 
-std::vector<double>
-Vehicle::jerk_minimize_trajectory(std::vector<double> &start,
-                                  std::vector<double> &end, double dt) {
+std::vector<double> Vehicle::jerk_minimize_trajectory(
+    std::vector<double> &start, std::vector<double> &end, double dt) {
   /**
    * Calculate the Jerk Minimizing Trajectory that connects the initial state
    * to the final state in time dt.

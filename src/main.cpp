@@ -1,21 +1,21 @@
+#include <uWS/uWS.h>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
 #include "spline.h"
 #include "vehicle.h"
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <uWS/uWS.h>
-#include <unordered_map>
-#include <vector>
 
 // for convenience
 using nlohmann::json;
 using std::string;
-using std::vector;
 using std::unordered_map;
+using std::vector;
 
 int main() {
   uWS::Hub h;
@@ -26,6 +26,14 @@ int main() {
   vector<double> map_waypoints_s;
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
+
+  // test
+  std::vector<double> vec1 = {1, 2, 3, 4, 5};
+  std::vector<double> vec2;
+  vec2.insert(vec2.begin(), vec1.begin() + 2, vec1.end());
+  for (double each : vec2) {
+    std::cout << "each: " << each << std::endl;
+  }
 
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
@@ -83,7 +91,7 @@ int main() {
           double car_s = j[1]["s"];
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
-          double car_speed = j[1]["speed"]; // Unit is MPH
+          double car_speed = j[1]["speed"];  // Unit is MPH
           printf("curr xy: (%f, %f), speed: %f\n", car_x, car_y,
                  mph2ms(car_speed));
 
@@ -150,14 +158,14 @@ int main() {
           auto msg = "42[\"control\"," + msgJson.dump() + "]";
 
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-        } // end "telemetry" if
+        }  // end "telemetry" if
       } else {
         // Manual driving
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
-    } // end websocket if
-  }); // end h.onMessage
+    }  // end websocket if
+  });  // end h.onMessage
 
   h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
