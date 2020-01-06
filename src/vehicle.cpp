@@ -14,14 +14,15 @@ using std::endl;
 using std::pow;
 using std::unordered_map;
 
-const double Vehicle::MAX_VEL = 22.0;
+const double Vehicle::MAX_VEL = 21.45;
 const double Vehicle::MIN_VEL = 10.0;
-const double Vehicle::MAX_ACC = 10.0;
+const double Vehicle::MAX_ACC = 9.0;
+const double Vehicle::MAX_JERK = 9.0;
 const double Vehicle::VEHICLE_RADIUS = 5.0;
 const double Vehicle::LANE_WIDTH = 4.0;
 const double Vehicle::MAX_S = 6945.554;
 const double Vehicle::COLLISION_THRESHOLD = 10.0;
-const double Vehicle::PREDICTION_TIME = 1.0;
+const double Vehicle::PREDICTION_TIME = 3.0;
 const double Vehicle::TIME_STEP = 0.02;
 
 Vehicle::Vehicle() {
@@ -30,6 +31,7 @@ Vehicle::Vehicle() {
   s_acc_ = 0.0;
   d_acc_ = 0.0;
   state_ = "CS";
+  target_lane_ = -1;
 }
 
 Vehicle::Vehicle(int id, double x, double y, double x_vel, double y_vel,
@@ -43,6 +45,7 @@ Vehicle::Vehicle(int id, double x, double y, double x_vel, double y_vel,
   s_ = s;
   d_ = d;
   lane_ = get_lane_from_d(d);
+  target_lane_ = lane_;
 }
 
 void Vehicle::show_info() {
@@ -71,6 +74,9 @@ void Vehicle::update_state(double x, double y, double s, double d, double yaw,
   yaw_ = yaw;
   speed_ = speed;
   lane_ = get_lane_from_d(d);
+  if (target_lane_ < 0) {
+    target_lane_ = lane_;
+  }
   //   cout << "curr s: " << s_ << endl;
 }
 
@@ -92,12 +98,41 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
 
   // Generate traffic prediction
   std::unordered_map<int, vector<vector<double>>> predictions;
+  for (auto iter = traffics.begin(); iter != traffics.end(); ++iter) {
+    predictions[iter->first] = iter->second.get_prediction();
+  }
+
+  // Generate all possible trajectory
+  std::unordered_map<int, vector<vector<double>>> next_trajectories;
+  /* for (int target_lane = 0; target_lane < LANE_AVAILABLE; ++target_lane) {
+    next_trajectories.insert(std::make_pair(
+        target_lane,
+        generate_trajectory_to_lane(lane_, traffics, prev_path_size)));
+  } */
+
+  // Compute the cost of each trajectory
+  vector<vector<double>> trajectory_sd;
+  if (lane_ == 1) {
+    if (speed_ > 10.0 && fabs(d_ - (target_lane_ + 0.5) * LANE_WIDTH) < 0.1) {
+      target_lane_ = lane_ - 1;
+      trajectory_sd =
+          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
+    } else {
+      trajectory_sd =
+          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
+    }
+  } else if (lane_ == 0) {
+    if (speed_ > 10.0 && fabs(d_ - (target_lane_ + 0.5) * LANE_WIDTH) < 0.1) {
+      target_lane_ = lane_ + 1;
+      trajectory_sd =
+          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
+    } else {
+      trajectory_sd =
+          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
+    }
+  }
+  // cout << "generate_trajectory_to_lane" << endl;
   // cout << "traffics size: " << traffics.size() << endl;
-  //   for (Vehicle vehicle : traffics) {
-  //     // predictions.insert(std::make_pair(vehicle.id_,
-  //     // vehicle.get_prediction()));
-  //     predictions[vehicle.id_] = vehicle.get_prediction();
-  //   }
 
   //   std::vector<std::string> next_states = successor_states();
   //   std::vector<double> costs;
@@ -127,16 +162,27 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   //   }
   //   // cout << "best_trajectory_idx:" << best_trajectory_idx << std::endl;
 
-  //   prev_trajectory_s_ = trajectries[best_trajectory_idx][0];
-  //   prev_trajectory_d_ = trajectries[best_trajectory_idx][1];
-  //   for (int i = 0; i < prev_trajectory_s_.size(); ++i) {
-  //     double s = prev_trajectory_s_[i];
-  //     double d = prev_trajectory_d_[i];
-  //     vector<double> xy =
-  //         getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
-  //     next_x_vals.push_back(xy[0]);
-  //     next_y_vals.push_back(xy[1]);
-  //   }
+  // prev_trajectory_s_ = trajectries[best_trajectory_idx][0];
+  // prev_trajectory_d_ = trajectries[best_trajectory_idx][1];
+  prev_trajectory_s_ = trajectory_sd[0];
+  prev_trajectory_d_ = trajectory_sd[1];
+  vector<double> prev_xy;
+  double prev_s;
+  for (int i = 0; i < prev_trajectory_s_.size(); ++i) {
+    double s = prev_trajectory_s_[i];
+    double d = prev_trajectory_d_[i];
+    vector<double> xy =
+        getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+    /* if (!prev_xy.empty()) {
+      double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
+      printf("x: %f, y: %f, dist: %f, dist_s: %f\n", xy[0], xy[1], dist,
+             s - prev_s);
+    } */
+    prev_xy = xy;
+    prev_s = s;
+    next_x_vals.push_back(xy[0]);
+    next_y_vals.push_back(xy[1]);
+  }
 }
 
 std::vector<std::string> Vehicle::successor_states() {
@@ -205,64 +251,201 @@ vector<vector<double>> Vehicle::generate_trajectory(
 vector<vector<double>> Vehicle::generate_trajectory_to_lane(
     int target_lane, unordered_map<int, Vehicle> &traffics,
     int prev_path_size) {
-  int used = prev_trajectory_s_.size() - prev_path_size;
+  auto derivative = [&](const vector<double> &coeff) {
+    vector<double> derivative_coeffs;
+    for (int i = 1; i < coeff.size(); i++) {
+      derivative_coeffs.push_back(i * coeff[i]);
+    }
+    return derivative_coeffs;
+  };
+
+  auto poly_eval = [&](double x, const vector<double> &coeffs) {
+    double result = 0.0;
+    double t = 1.0;
+    for (int i = 0; i < coeffs.size(); i++) {
+      result += coeffs[i] * t;
+      t *= x;
+    }
+    return result;
+  };
+
+  auto check_s_jmt = [&](const vector<double> &s_coeffs, double duration) {
+    vector<double> s_vel_coeffs = derivative(s_coeffs);
+    vector<double> s_acc_coeffs = derivative(s_vel_coeffs);
+    vector<double> s_jerk_coeffs = derivative(s_acc_coeffs);
+    for (double t = TIME_STEP; t <= duration; t += TIME_STEP) {
+      double s_vel = poly_eval(t, s_vel_coeffs);
+      double s_acc = fabs(poly_eval(t, s_acc_coeffs));
+      double s_jerk = fabs(poly_eval(t, s_jerk_coeffs));
+      // printf("duration: %f, s_vel: %f, s_acc: %f, s_jerk: %f\n", duration,
+      //        s_vel, s_acc, s_jerk);
+      if (s_vel >= MAX_VEL || s_vel <= 0.0 || s_acc >= MAX_ACC ||
+          s_jerk >= MAX_JERK) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  auto check_d_jmt = [&](const vector<double> &d_coeffs, double duration) {
+    vector<double> d_vel_coeffs = derivative(d_coeffs);
+    vector<double> d_acc_coeffs = derivative(d_vel_coeffs);
+    vector<double> d_jerk_coeffs = derivative(d_acc_coeffs);
+    // printf("duration: %f\n", duration);
+    for (double t = TIME_STEP; t <= duration; t += TIME_STEP) {
+      double d_vel = fabs(poly_eval(t, d_vel_coeffs));
+      double d_acc = fabs(poly_eval(t, d_acc_coeffs));
+      double d_jerk = fabs(poly_eval(t, d_jerk_coeffs));
+      if (d_vel >= MAX_VEL || d_acc >= MAX_ACC || d_jerk >= MAX_JERK) {
+        // printf("Fail, t: %f, d_vel: %f, d_acc: %f, d_jerk: %f\n", t, d_vel,
+        //        d_acc, d_jerk);
+        return false;
+      }
+    }
+    return true;
+  };
+
   vector<double> trajectory_s;
   vector<double> trajectory_d;
-  trajectory_s.insert(
-      trajectory_s.begin(),
-      prev_trajectory_s_.begin() + (prev_trajectory_s_.size() - prev_path_size),
-      prev_trajectory_s_.end());
-  trajectory_d.insert(
-      trajectory_d.begin(),
-      prev_trajectory_d_.begin() + (prev_trajectory_d_.size() - prev_path_size),
-      prev_trajectory_d_.end());
+  if (prev_path_size >= 2) {
+    trajectory_s.insert(trajectory_s.begin(),
+                        prev_trajectory_s_.begin() +
+                            (prev_trajectory_s_.size() - prev_path_size),
+                        prev_trajectory_s_.end());
+    trajectory_d.insert(trajectory_d.begin(),
+                        prev_trajectory_d_.begin() +
+                            (prev_trajectory_d_.size() - prev_path_size),
+                        prev_trajectory_d_.end());
+  }
 
   vector<double> start_s(3, 0.0);
   vector<double> end_s(3, 0.0);
   vector<double> start_d(3, 0.0);
   vector<double> end_d(3, 0.0);
-  if (target_lane == lane_) {
-    if (trajectory_s.size() <= 2) {
-      start_s[0] = s_;
-      start_s[1] = speed_;
-      start_s[2] = 0.0;
-      //   start_d[0] = d_;
-      //   start_d[1] = 0.0;
-      //   start_d[2] = 0.0;
+  if (trajectory_s.size() <= 2) {
+    start_s[0] = s_;
+    start_s[1] = speed_;
+    start_s[2] = 0.0;
+    start_d[0] = d_;
+    start_d[1] = 0.0;
+    start_d[2] = 0.0;
+  } else {
+    double s_0 = trajectory_s[prev_path_size - 1];
+    double s_1 = trajectory_s[prev_path_size - 2];
+    double s_2 = trajectory_s[prev_path_size - 3];
+    double s_vel_0 = (s_0 - s_1) / TIME_STEP;
+    double s_vel_1 = (s_1 - s_2) / TIME_STEP;
+    double s_acc_0 = (s_vel_0 - s_vel_1) / TIME_STEP;
+    double d_0 = trajectory_d[prev_path_size - 1];
+    double d_1 = trajectory_d[prev_path_size - 2];
+    double d_2 = trajectory_d[prev_path_size - 3];
+    double d_vel_0 = (d_0 - d_1) / TIME_STEP;
+    double d_vel_1 = (d_1 - d_2) / TIME_STEP;
+    double d_acc_0 = (d_vel_0 - d_vel_1) / TIME_STEP;
+    start_s[0] = s_0;
+    start_s[1] = s_vel_0;
+    start_s[2] = s_acc_0;
+    start_d[0] = d_0;
+    start_d[1] = d_vel_0;
+    start_d[2] = d_acc_0;
+  }
+
+  int total_step = PREDICTION_TIME / TIME_STEP;
+  int vehicle_ahead_id = get_vehicle_ahead(target_lane, traffics);
+  end_s[0] = s_ + 100.0;
+  end_s[1] = MAX_VEL;
+  end_d[0] = (target_lane + 0.5) * LANE_WIDTH;
+  if (target_lane != lane_) {
+    if (target_lane > lane_) {
+      end_d[1] = 0.3;
+      end_d[2] = 0.3;
     } else {
-      double last_s_0 = trajectory_s[prev_path_size - 1];
-      double last_s_1 = trajectory_s[prev_path_size - 2];
-      double last_s_2 = trajectory_s[prev_path_size - 3];
-      double s_vel_0 = (last_s_0 - last_s_1) / TIME_STEP;
-      double s_vel_1 = (last_s_1 - last_s_2) / TIME_STEP;
-      double s_acc_0 = (s_vel_0 - s_vel_1) / TIME_STEP;
-      //   double last_d_0 = trajectory_d[prev_path_size - 1];
-      //   double last_d_1 = trajectory_d[prev_path_size - 2];
-      //   double last_d_2 = trajectory_d[prev_path_size - 3];
-      //   double d_vel_0 = (last_d_0 - last_d_1) / TIME_STEP;
-      //   double d_vel_1 = (last_d_1 - last_d_2) / TIME_STEP;
-      //   double d_acc_0 = (d_vel_0 - d_vel_1) / TIME_STEP;
-      start_s[0] = last_s_0;
-      start_s[1] = s_vel_0;
-      start_s[2] = s_acc_0;
-      //   start_d[0] = last_d_0;
-      //   start_d[1] = d_vel_0;
-      //   start_d[2] = d_acc_0;
+      end_d[1] = -0.3;
+      end_d[2] = -0.3;
     }
-
-    int vehicle_ahead_id = get_vehicle_ahead(traffics);
-    end_s[0] = start_s[0] + 100.0;
-    end_s[1] = MAX_VEL * 0.95;
-    if (vehicle_ahead_id >= 0) {
-      Vehicle vehicle = traffics[vehicle_ahead_id];
-      end_s[0] = std::min(end_s[0], vehicle.s_ - COLLISION_THRESHOLD);
+  } else {
+    end_d[1] = 0.0;
+    end_d[2] = 0.0;
+  }
+  if (vehicle_ahead_id >= 0) {
+    Vehicle vehicle = traffics[vehicle_ahead_id];
+    double predict_time = (total_step - prev_path_size) * TIME_STEP;
+    double collision_time_1 = 1.0;
+    double collision_time_2 = 2.0;
+    double vehicle_predict_s = vehicle.s_ + vehicle.speed_ * predict_time;
+    double ego_predict_s_1 = s_ + speed_ * collision_time_1 + 5.0;
+    double ego_predict_s_2 = s_ + speed_ * collision_time_2 + 5.0;
+    printf("end_s[0]: %f, vehicle_predict_s: %f\n", end_s[0],
+           vehicle_predict_s);
+    if (ego_predict_s_1 < vehicle_predict_s &&
+        vehicle_predict_s <= ego_predict_s_2) {
+      printf("Follow vehicle\n");
       end_s[1] = std::min(end_s[1], vehicle.speed_);
+    } else if (ego_predict_s_1 >= vehicle_predict_s) {
+      printf("Far away vehicle\n");
+      end_s[1] = std::min(end_s[1], vehicle.speed_ * 0.8);
     }
-    end_s[2] = 0.0;
+  }
+  end_s[2] = 0.0;
+  // end_d[2] = 0.0;
+  printf("s, start: %f, %f, %f\n", start_s[0], start_s[1], start_s[2]);
+  printf("s: end: %f, %f, %f\n", end_s[0], end_s[1], end_s[2]);
+  printf("d, start: %f, %f, %f\n", start_d[0], start_d[1], start_d[2]);
+  printf("d: end: %f, %f, %f\n", end_d[0], end_d[1], end_d[2]);
 
-    vector<vector<double>> candidate_jmt_params;
-    for (double dt = 0.1; dt <= 20.0; dt += 0.1) {
-      vector<double> jmt_params = jerk_minimize_trajectory(start_s, end_s, dt);
+  vector<vector<double>> candidate_s_jmt_params;
+  vector<vector<double>> candidate_d_jmt_params;
+  for (double dt = 0.1; dt <= 20.0; dt += 0.1) {
+    vector<double> s_jmt_coeffs = jerk_minimize_trajectory(start_s, end_s, dt);
+    if (check_s_jmt(s_jmt_coeffs, dt)) {
+      candidate_s_jmt_params.push_back(s_jmt_coeffs);
+    }
+
+    vector<double> d_jmt_coeffs = jerk_minimize_trajectory(start_d, end_d, dt);
+    if (check_d_jmt(d_jmt_coeffs, dt)) {
+      candidate_d_jmt_params.push_back(d_jmt_coeffs);
+    }
+  }
+
+  // printf("candidate_d_jmt_params size: %d\n", candidate_d_jmt_params.size());
+  if (!candidate_s_jmt_params.empty() && !candidate_d_jmt_params.empty()) {
+    // Choose the best jmt_s_params
+    int best_s_idx = 0;
+    double min_target_s_speed_diff = 1000.0;
+    for (int i = 0; i < candidate_s_jmt_params.size(); ++i) {
+      vector<double> &s_coeffs = candidate_s_jmt_params[i];
+      vector<double> s_vel_coeffs = derivative(s_coeffs);
+      double t = (total_step - prev_path_size) * TIME_STEP;
+      double speed = poly_eval(t, s_vel_coeffs);
+      if (fabs(end_s[1] - speed) < min_target_s_speed_diff) {
+        min_target_s_speed_diff = fabs(end_s[1] - speed);
+        best_s_idx = i;
+      }
+    }
+    vector<double> &final_s_coeffs = candidate_s_jmt_params[best_s_idx];
+
+    // Choose the best jmt_s_params
+    int best_d_idx = 0;
+    double min_target_d_speed_diff = 1000.0;
+    for (int i = 0; i < candidate_d_jmt_params.size(); ++i) {
+      vector<double> &d_coeffs = candidate_d_jmt_params[i];
+      vector<double> d_vel_coeffs = derivative(d_coeffs);
+      double t = (total_step - prev_path_size) * TIME_STEP;
+      double speed = poly_eval(t, d_vel_coeffs);
+      if (fabs(end_d[1] - speed) < min_target_d_speed_diff) {
+        min_target_d_speed_diff = fabs(end_d[1] - speed);
+        best_d_idx = i;
+      }
+    }
+    vector<double> &final_d_coeffs = candidate_d_jmt_params[best_d_idx];
+
+    for (int i = 0; (i + prev_path_size) < total_step; ++i) {
+      double t = (i + 1) * TIME_STEP;
+      double s = poly_eval(t, final_s_coeffs);
+      double d = poly_eval(t, final_d_coeffs);
+      // printf("t: %f, s: %f\n", t, s);
+      trajectory_s.push_back(s);
+      trajectory_d.push_back(d);
     }
   }
 
@@ -424,7 +607,8 @@ std::vector<std::vector<double>> Vehicle::lane_change_trajectory(
   return trajectory;
 }
 
-int Vehicle::get_vehicle_behind(const unordered_map<int, Vehicle> &traffics) {
+/* int Vehicle::get_vehicle_behind(const unordered_map<int, Vehicle> &traffics)
+{
   // Returns a true if a vehicle is found behind the current vehicle, false
   //   otherwise. The passed reference rVehicle is updated if a vehicle is
   //   found.
@@ -442,9 +626,10 @@ int Vehicle::get_vehicle_behind(const unordered_map<int, Vehicle> &traffics) {
   }
 
   return id;
-}
+} */
 
-int Vehicle::get_vehicle_ahead(const unordered_map<int, Vehicle> &traffics) {
+int Vehicle::get_vehicle_ahead(int target_lane,
+                               const unordered_map<int, Vehicle> &traffics) {
   // Returns a true if a vehicle is found ahead of the current vehicle, false
   //   otherwise. The passed reference rVehicle is updated if a vehicle is
   //   found.
@@ -455,7 +640,7 @@ int Vehicle::get_vehicle_ahead(const unordered_map<int, Vehicle> &traffics) {
     double s = vehicle.s_;
     double d = vehicle.d_;
     double lane = vehicle.lane_;
-    if (lane == this->lane_ && s > this->s_ && s < min_s) {
+    if (lane == target_lane && s > this->s_ && s < min_s) {
       min_s = s;
       id = vehicle.id_;
     }

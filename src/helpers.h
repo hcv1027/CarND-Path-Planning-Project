@@ -44,7 +44,7 @@ double distance(double x1, double y1, double x2, double y2) {
 // Calculate closest waypoint to current x, y position
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x,
                     const vector<double> &maps_y) {
-  double closestLen = 100000; // large number
+  double closestLen = 100000;  // large number
   int closestWaypoint = 0;
 
   for (int i = 0; i < maps_x.size(); ++i) {
@@ -183,24 +183,6 @@ double round_frenet_s(double s) {
   return s;
 }
 
-vector<double> derivative(vector<double> coeff) {
-  vector<double> derivative_coeffs;
-  for (int i = 1; i < coeff.size(); i++) {
-    derivative_coeffs.push_back(i * coeff[i]);
-  }
-  return derivative_coeffs;
-}
-
-double poly_eval(double x, vector<double> coeffs) {
-  double result = 0.0;
-  double t = 1.0;
-  for (int i = 0; i < coeffs.size(); i++) {
-    result += coeffs[i] * t;
-    t *= x;
-  }
-  return result;
-}
-
 double TIME_STEP = 0.02;
 // check whether the JMT coefficients will break the car limits
 // within check_duration
@@ -219,6 +201,6 @@ double TIME_STEP = 0.02;
   return true;
 } */
 
-} // namespace
+}  // namespace
 
-#endif // HELPERS_H
+#endif  // HELPERS_H

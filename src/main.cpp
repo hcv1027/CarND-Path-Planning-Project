@@ -27,14 +27,6 @@ int main() {
   vector<double> map_waypoints_dx;
   vector<double> map_waypoints_dy;
 
-  // test
-  std::vector<double> vec1 = {1, 2, 3, 4, 5};
-  std::vector<double> vec2;
-  vec2.insert(vec2.begin(), vec1.begin() + 2, vec1.end());
-  for (double each : vec2) {
-    std::cout << "each: " << each << std::endl;
-  }
-
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
@@ -119,7 +111,7 @@ int main() {
             // The max speed is 50 MPH = 22.352 meter/second.
             // I'll predict the vehicle's trajectory in 3 seconds.
             // 3 * 22.352 = 67.056, So I set MAX_DISTANCE = 68.0.
-            const double MAX_DISTANCE = 68.0;
+            const double MAX_DISTANCE = 120.0;
             int id = each[0];
             double x = each[1];
             double y = each[2];

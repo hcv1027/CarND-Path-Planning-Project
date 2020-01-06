@@ -55,6 +55,7 @@ class Vehicle {
   double x_vel_;  // Unit: m/s
   double y_vel_;  // Unit: m/s
   int lane_;
+  int target_lane_;
 
   std::vector<double> map_waypoints_x_;
   std::vector<double> map_waypoints_y_;
@@ -83,7 +84,7 @@ class Vehicle {
 
   void get_trajectory(std::vector<double> &next_x_vals,
                       std::vector<double> &next_y_vals, int prev_path_size,
-                      unordered_map<int, Vehicle> &traffics);
+                      std::unordered_map<int, Vehicle> &traffics);
 
   std::vector<std::string> successor_states();
 
@@ -94,7 +95,7 @@ class Vehicle {
   std::vector<std::vector<double>> get_prediction();
 
   std::vector<std::vector<double>> generate_trajectory_to_lane(
-      int target_lane, unordered_map<int, Vehicle> &traffics,
+      int target_lane, std::unordered_map<int, Vehicle> &traffics,
       int prev_path_size);
 
   std::vector<std::vector<double>> generate_trajectory(
@@ -110,8 +111,10 @@ class Vehicle {
       std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
       int prev_path_size);
 
-  int get_vehicle_behind(const unordered_map<int, Vehicle> &traffics);
-  int get_vehicle_ahead(const unordered_map<int, Vehicle> &traffics);
+  //   int get_vehicle_behind(int target_lane,
+  //                          const std::unordered_map<int, Vehicle> &traffics);
+  int get_vehicle_ahead(int target_lane,
+                        const std::unordered_map<int, Vehicle> &traffics);
 
   std::vector<double> jerk_minimize_trajectory(std::vector<double> &start,
                                                std::vector<double> &end,
