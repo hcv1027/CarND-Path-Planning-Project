@@ -32,13 +32,14 @@ class Vehicle {
   static const double PREDICTION_TIME;
   static const double TIME_STEP;
 
-  const std::unordered_map<std::string, int> LANE_DIRECTION = {
-      {"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1}};
+  enum State { KL = 0, LCL = 1, LCR = 2 };
+  /* const std::unordered_map<std::string, int> LANE_DIRECTION = {
+      {"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1}}; */
 
  private:
   int id_;
 
-  std::string state_;
+  State state_;
   double x_;
   double y_;
   double s_;

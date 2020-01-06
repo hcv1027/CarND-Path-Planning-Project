@@ -30,7 +30,7 @@ Vehicle::Vehicle() {
   d_vel_ = 0.0;
   s_acc_ = 0.0;
   d_acc_ = 0.0;
-  state_ = "CS";
+  //   state_ = "CS";
   target_lane_ = -1;
 }
 
@@ -76,6 +76,11 @@ void Vehicle::update_state(double x, double y, double s, double d, double yaw,
   lane_ = get_lane_from_d(d);
   if (target_lane_ < 0) {
     target_lane_ = lane_;
+  } else if (lane_ != target_lane_) {
+    // Confirm that the lane change task has been completed
+    if (fabs(d_ - (target_lane_ + 0.5) * LANE_WIDTH) < 0.1) {
+      target_lane_ = lane_;
+    }
   }
   //   cout << "curr s: " << s_ << endl;
 }
@@ -103,34 +108,101 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   }
 
   // Generate all possible trajectory
+  vector<int> target_lanes;
+  if (lane_ == target_lane_) {
+    for (int i = 0; i < LANE_AVAILABLE; ++i) {
+      target_lanes.push_back(i);
+    }
+  } else {
+    target_lanes.push_back(lane_);
+  }
   std::unordered_map<int, vector<vector<double>>> next_trajectories;
-  /* for (int target_lane = 0; target_lane < LANE_AVAILABLE; ++target_lane) {
+  for (int i = 0; i < target_lanes.size(); ++i) {
+    int target_lane = target_lanes[i];
     next_trajectories.insert(std::make_pair(
         target_lane,
-        generate_trajectory_to_lane(lane_, traffics, prev_path_size)));
-  } */
+        generate_trajectory_to_lane(target_lane, traffics, prev_path_size)));
+  }
+
+  auto collision_cost = [&](vector<vector<double>> &trajectory) {
+    const double cost = 100.0;
+    vector<double> &s_trajectory = trajectory[0];
+    vector<double> &d_trajectory = trajectory[1];
+    for (int i = 0; i < trajectory.size(); ++i) {
+      double s = s_trajectory[i];
+      double d = d_trajectory[i];
+      vector<double> xy =
+          getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+      for (auto iter = predictions.begin(); iter != predictions.end(); ++iter) {
+        vector<vector<double>> &prediction = iter->second;
+        double x1 = prediction[0][i];
+        double y1 = prediction[1][i];
+        double dist = distance(x1, y1, xy[0], xy[1]);
+        if (dist < 5.0) {
+          return cost;
+        }
+      }
+    }
+    return 0.0;
+  };
+
+  auto lane_change_cost = [&](int target_lane) {
+    const double cost = 2.0;
+    return (target_lane == lane_) ? 0.0 : cost;
+  };
+
+  auto speed_cost = [&](vector<vector<double>> &trajectory) {
+    double cost;
+    vector<double> &s_trajectory = trajectory[0];
+    int size = s_trajectory.size();
+    double s0 = s_trajectory[size - 1];
+    double s1 = s_trajectory[size - 2];
+    double s2 = s_trajectory[size - 3];
+    double v0 = (s0 - s1) / TIME_STEP;
+    double v1 = (s1 - s2) / TIME_STEP;
+    double ave_speed = (v0 + v1) / 2;
+    printf("ave_speed: %f, score: %f\n", ave_speed, (MAX_VEL - ave_speed));
+    if (ave_speed <= MAX_VEL) {
+      return (MAX_VEL - ave_speed);
+    } else {
+      return 20.0;
+    }
+    return cost;
+  };
 
   // Compute the cost of each trajectory
-  vector<vector<double>> trajectory_sd;
-  if (lane_ == 1) {
+
+  auto best_iter = next_trajectories.begin();
+  double min_cost = std::numeric_limits<double>::infinity();
+  for (auto iter = next_trajectories.begin(); iter != next_trajectories.end();
+       ++iter) {
+    int target_lane = iter->first;
+    vector<vector<double>> &trajectory = iter->second;
+    printf("target_lane: %d\n", target_lane);
+    double cost1 = collision_cost(trajectory);
+    double cost2 = lane_change_cost(target_lane);
+    double cost3 = speed_cost(trajectory);
+    printf("collision cost: %f\n", cost1);
+    printf("change lane cost: %f\n", cost2);
+    printf("speed cost: %f\n", cost3);
+    double total_cost = cost1 + cost2 + cost3;
+    if (total_cost < min_cost) {
+      min_cost = total_cost;
+      best_iter = iter;
+    }
+  }
+  vector<vector<double>> &trajectory_sd = best_iter->second;
+  /* if (lane_ == 1) {
     if (speed_ > 10.0 && fabs(d_ - (target_lane_ + 0.5) * LANE_WIDTH) < 0.1) {
       target_lane_ = lane_ - 1;
-      trajectory_sd =
-          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
-    } else {
-      trajectory_sd =
-          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
     }
   } else if (lane_ == 0) {
     if (speed_ > 10.0 && fabs(d_ - (target_lane_ + 0.5) * LANE_WIDTH) < 0.1) {
       target_lane_ = lane_ + 1;
-      trajectory_sd =
-          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
-    } else {
-      trajectory_sd =
-          generate_trajectory_to_lane(target_lane_, traffics, prev_path_size);
     }
   }
+  trajectory_sd =
+      generate_trajectory_to_lane(target_lane_, traffics, prev_path_size); */
   // cout << "generate_trajectory_to_lane" << endl;
   // cout << "traffics size: " << traffics.size() << endl;
 
@@ -191,7 +263,7 @@ std::vector<std::string> Vehicle::successor_states() {
   //   instantaneously, so LCL and LCR can only transition back to KL.
   std::vector<std::string> states;
   states.push_back("KL");
-  /* if (this->state_.compare("KL") == 0) {
+  /* if (this->state_ == KL) {
     states.push_back("PLCL");
     states.push_back("PLCR");
   } else if (this->state_.compare("PLCL") == 0) {
@@ -211,7 +283,7 @@ std::vector<std::string> Vehicle::successor_states() {
 }
 
 std::vector<std::vector<double>> Vehicle::get_prediction() {
-  double dt = TIME_STEP;
+  /* double dt = TIME_STEP;
   double elapsed_time = 0.0;
   vector<vector<double>> prediction;
   prediction.push_back({s_, d_});
@@ -230,7 +302,22 @@ std::vector<std::vector<double>> Vehicle::get_prediction() {
     x = next_x;
     y = next_y;
     elapsed_time += dt;
-  } while (elapsed_time < PREDICTION_TIME);
+  } while (elapsed_time < PREDICTION_TIME); */
+
+  int total_step = PREDICTION_TIME / TIME_STEP;
+  double elapsed_time = TIME_STEP;
+  vector<double> x_trajectory;
+  vector<double> y_trajectory;
+  for (int i = 0; i < total_step; ++i) {
+    double next_x = x_ + x_vel_ * elapsed_time;
+    double next_y = y_ + y_vel_ * elapsed_time;
+    x_trajectory.push_back(next_x);
+    y_trajectory.push_back(next_y);
+    elapsed_time += TIME_STEP;
+  }
+  vector<vector<double>> prediction;
+  prediction.push_back(x_trajectory);
+  prediction.push_back(y_trajectory);
 
   return prediction;
 }
@@ -367,6 +454,7 @@ vector<vector<double>> Vehicle::generate_trajectory_to_lane(
     end_d[1] = 0.0;
     end_d[2] = 0.0;
   }
+  printf("target lane: %d\n", target_lane);
   if (vehicle_ahead_id >= 0) {
     Vehicle vehicle = traffics[vehicle_ahead_id];
     double predict_time = (total_step - prev_path_size) * TIME_STEP;
