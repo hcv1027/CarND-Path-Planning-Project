@@ -98,7 +98,7 @@ int main() {
             prev_path.push_back(point);
           }
           std::cout << "--------------------" << std::endl;
-          std::cout << "prev_path size: " << prev_path.size() << std::endl;
+          // std::cout << "prev_path size: " << prev_path.size() << std::endl;
           // Previous path's end s and d values
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];

@@ -99,6 +99,10 @@ class Vehicle {
       int target_lane, std::unordered_map<int, Vehicle> &traffics,
       int prev_path_size);
 
+  std::vector<std::vector<double>> generate_trajectory_to_lane_v1(
+      int target_lane, std::unordered_map<int, Vehicle> &traffics,
+      int prev_path_size);
+
   std::vector<std::vector<double>> generate_trajectory(
       std::string state,
       std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
