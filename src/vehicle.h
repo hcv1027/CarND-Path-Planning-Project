@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include "spline.h"
 // #include "json.hpp"
 
 /**
@@ -57,6 +58,7 @@ class Vehicle {
   double y_vel_;  // Unit: m/s
   int lane_;
   int target_lane_;
+  std::vector<tk::spline> global_splines;
 
   std::vector<double> map_waypoints_x_;
   std::vector<double> map_waypoints_y_;
@@ -86,6 +88,9 @@ class Vehicle {
   void get_trajectory(std::vector<double> &next_x_vals,
                       std::vector<double> &next_y_vals, int prev_path_size,
                       std::unordered_map<int, Vehicle> &traffics);
+
+  std::vector<double> getXY(double s, double d);
+  void generate_splines();
 
   std::vector<std::string> successor_states();
 

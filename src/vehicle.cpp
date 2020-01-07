@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <iostream>
 #include <limits>
+#include <list>
 #include "Eigen-3.3/Eigen/Dense"
 #include "helpers.h"
 #include "spline.h"
@@ -12,6 +13,7 @@ using Eigen::Vector3d;
 using std::cout;
 using std::endl;
 using std::pow;
+using std::list;
 using std::unordered_map;
 
 const double Vehicle::MAX_VEL = 21.45;
@@ -63,6 +65,7 @@ void Vehicle::set_map(const std::vector<double> &map_waypoints_x,
   map_waypoints_s_.assign(map_waypoints_s.begin(), map_waypoints_s.end());
   map_waypoints_dx_.assign(map_waypoints_dx.begin(), map_waypoints_dx.end());
   map_waypoints_dy_.assign(map_waypoints_dy.begin(), map_waypoints_dy.end());
+  generate_splines();
 }
 
 void Vehicle::update_state(double x, double y, double s, double d, double yaw,
@@ -163,34 +166,30 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   auto lane_change_cost = [&](int target_lane) {
     const double cost = 4.0;
     if (target_lane == (lane_ + 1) || target_lane == (lane_ - 1)) {
-      return 4.0;
+      return 2.5;
     } else if (target_lane == (lane_ + 2) || target_lane == (lane_ - 2)) {
-      return 6.0;
+      return 100.0;
     }
     return 0.0;
   };
 
-  auto speed_cost = [&](vector<vector<double>> &trajectory) {
-    double cost;
-    vector<double> &s_trajectory = trajectory[0];
-    int size = s_trajectory.size();
-    double s0 = s_trajectory[size - 1];
-    double s1 = s_trajectory[size - 2];
-    double s2 = s_trajectory[size - 3];
-    double v0 = (s0 - s1) / TIME_STEP;
-    double v1 = (s1 - s2) / TIME_STEP;
-    double ave_speed = (v0 + v1) / 2;
-    printf("speed score: %f\n", (MAX_VEL - ave_speed));
-    if (ave_speed > MAX_VEL) {
-      return 10.0;
-    } else if (ave_speed < MAX_VEL * 0.85) {
-      return (MAX_VEL - ave_speed) * 1.0;
+  // auto speed_cost = [&](vector<vector<double>> &trajectory) {
+  auto speed_cost = [&](int target_lane) {
+    int id = get_vehicle_ahead(target_lane, traffics);
+    if (id >= 0) {
+      Vehicle &vehicle = traffics[id];
+      double prev_s_dist =
+          (prev_trajectory_s_.empty()) ? 0.0 : *(prev_trajectory_s_.rbegin()) -
+                                                   prev_trajectory_s_[0];
+      if (MAX_VEL >= vehicle.speed_ && vehicle.s_ < s_ + prev_s_dist) {
+        return MAX_VEL - vehicle.speed_;
+      }
     }
     return 0.0;
   };
 
   auto change_plan_cost = [&](int target_lane) {
-    if (target_lane != target_lane_) {
+    if (lane_ != target_lane_ && target_lane != target_lane_) {
       return 6.0;
     }
 
@@ -210,7 +209,7 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     printf("collision cost: %f\n", cost1);
     double cost2 = lane_change_cost(target_lane);
     printf("change lane cost: %f\n", cost2);
-    double cost3 = speed_cost(trajectory);
+    double cost3 = speed_cost(target_lane);
     printf("speed cost: %f\n", cost3);
     double cost4 = change_plan_cost(target_lane);
     printf("Change plan cost: %f\n\n", cost4);
@@ -226,59 +225,126 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     target_lane_ = best_iter->first;
     printf("Change to %d\n", target_lane_);
   }
-  /* if (lane_ == 1) {
-    if (speed_ > 10.0 && fabs(d_ - (target_lane_ + 0.5) * LANE_WIDTH) < 0.1) {
-      target_lane_ = lane_ - 1;
-    }
-  } else if (lane_ == 0) {
-    if (speed_ > 10.0 && fabs(d_ - (target_lane_ + 0.5) * LANE_WIDTH) < 0.1) {
-      target_lane_ = lane_ + 1;
-    }
-  }
-  trajectory_sd =
-      generate_trajectory_to_lane(target_lane_, traffics, prev_path_size); */
-  // cout << "generate_trajectory_to_lane" << endl;
-  // cout << "traffics size: " << traffics.size() << endl;
 
-  //   std::vector<std::string> next_states = successor_states();
-  //   std::vector<double> costs;
-  //   std::vector<vector<vector<double>>> trajectries;
-
-  //   // cout << "predictions complete" << endl;
-  //   for (std::string state : next_states) {
-  //     vector<vector<double>> trajectory =
-  //         generate_trajectory(state, predictions, prev_path_size);
-  //     if (trajectory.size() > 0) {
-  //       double cost = 0.0;
-  //       costs.push_back(cost);
-  //     } else {
-  //       costs.push_back(std::numeric_limits<double>::infinity());
-  //     }
-  //     trajectries.push_back(trajectory);
-  //   }
-  //   // cout << "generate_trajectory complete" << endl;
-
-  //   double min_cost = std::numeric_limits<double>::infinity();
-  //   int best_trajectory_idx = 0;
-  //   for (int i = 0; i < trajectries.size(); ++i) {
-  //     if (costs[i] < min_cost) {
-  //       min_cost = costs[i];
-  //       best_trajectory_idx = i;
-  //     }
-  //   }
-  //   // cout << "best_trajectory_idx:" << best_trajectory_idx << std::endl;
-
-  // prev_trajectory_s_ = trajectries[best_trajectory_idx][0];
-  // prev_trajectory_d_ = trajectries[best_trajectory_idx][1];
-  prev_trajectory_s_ = trajectory_sd[0];
-  prev_trajectory_d_ = trajectory_sd[1];
-  vector<double> prev_xy;
-  double prev_s;
-  for (int i = 0; i < prev_trajectory_s_.size(); ++i) {
-    double s = prev_trajectory_s_[i];
-    double d = prev_trajectory_d_[i];
+  /* tk::spline spline_func;
+  vector<double> sample_x;
+  vector<double> sample_y;
+  vector<vector<double>> sample_xy;
+  double s0 = trajectory_sd[0][0];
+  double d0 = trajectory_sd[1][0];
+  vector<double> xy0 =
+      getXY(s0, d0, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+  double yaw = atan2(xy0[1] - y_, xy0[0] - x_);
+  double cos_yaw = cos(-yaw);
+  double sin_yaw = sin(-yaw);
+  double total_dist = 0.0;
+  vector<double> prev_xy = {x_, y_};
+  // printf("yaw: %f, cos: %f, sin: %f\n", yaw, cos_yaw, sin_yaw);
+  for (int i = 0; i < trajectory_sd[0].size(); i += 30) {
+    double s = trajectory_sd[0][i];
+    double d = trajectory_sd[1][i];
     vector<double> xy =
         getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+    double dx = xy[0] - x_;
+    double dy = xy[1] - y_;
+    double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
+    total_dist += dist;
+    prev_xy = xy;
+
+    double local_x = dx * cos_yaw - dy * sin_yaw;
+    double local_y = dx * sin_yaw + dy * cos_yaw;
+    // sample_x.push_back(local_x);
+    // sample_y.push_back(local_y);
+    sample_xy.push_back({local_x, local_y});
+    // printf("1 x: %f, y: %f\n", xy[0], xy[1]);
+    // printf("1, x: %f, y: %f\n", local_x, local_y);
+  }
+  printf("total distance: %f\n", total_dist);
+  std::sort(sample_xy.begin(), sample_xy.end(),
+            [](const vector<double> &a, const vector<double> &b) {
+              return a[0] < b[0];
+            });
+  for (vector<double> xy : sample_xy) {
+    sample_x.push_back(xy[0]);
+    sample_y.push_back(xy[1]);
+  }
+
+  spline_func.set_points(sample_x, sample_y);
+  int prev_used = prev_trajectory_s_.size() - prev_path_size;
+  double prev_s = (prev_path_size > 0) ? prev_trajectory_s_[prev_used - 1] : s_;
+  double total_s = *(trajectory_sd[0].rbegin()) - prev_s;
+  double total_x = *(sample_x.rbegin());
+  // printf("total s: %f, total x: %f\n", total_s, total_x);
+  cos_yaw = cos(yaw);
+  sin_yaw = sin(yaw);
+
+  double prev_x = 0.0;
+  double prev_y = 0.0;
+  for (int i = 0; i < trajectory_sd[0].size(); ++i) {
+    double ds = trajectory_sd[0][i] - prev_s;
+    printf("s1: %f, s0: %f\n", trajectory_sd[0][i], prev_s);
+
+    double dist_ratio = total_dist * ds / total_s;
+    // printf("dist_ratio: %f, ds: %f, total s: %f\n", dist_ratio, ds, total_s);
+    // double min_diff = std::numeric_limits<double>::infinity();
+    double local_x = prev_x + total_x * ds / total_s;
+    double local_y = spline_func(local_x);
+    double min_dist = distance(local_x, local_y, prev_x, prev_y);
+    double min_dist_diff = fabs(min_dist - dist_ratio);
+    for (float j = 0.1; j <= 1.0; j += 0.1) {
+      double x = prev_x + dist_ratio * j;
+      double y = spline_func(x);
+
+      double dist = distance(x, y, prev_x, prev_y);
+      double dist_diff = fabs(dist - dist_ratio);
+      // printf("i: %d, j: %f, dist: %f, diff: %f\n", i, j, dist, dist_diff);
+      if (dist_diff < min_dist_diff) {
+        printf("Hello");
+        min_dist_diff = dist_diff;
+        min_dist = dist;
+        local_x = x;
+        local_y = y;
+      }
+    }
+    printf("i: %d, dist_ratio: %f, dist: %f, diff: %f\n", i, dist_ratio,
+           min_dist, dist_ratio - min_dist);
+    // double local_x = prev_x + total_x * s / total_s;
+    // double local_y = spline_func(local_x);
+    double global_x = x_ + local_x * cos_yaw - local_y * sin_yaw;
+    double global_y = y_ + local_x * sin_yaw + local_y * cos_yaw;
+    next_x_vals.push_back(global_x);
+    next_y_vals.push_back(global_y);
+    prev_s = trajectory_sd[0][i];
+    prev_x = local_x;
+    prev_y = local_y;
+    // printf("2 x: %f, y: %f\n", global_x, global_y);
+    // printf("2 x: %f, y: %f\n", local_x, local_y);
+  }
+  prev_trajectory_s_ = trajectory_sd[0];
+  prev_trajectory_d_ = trajectory_sd[1]; */
+
+  vector<double> prev_xy;
+  double prev_s;
+  int prev_used_path = prev_trajectory_s_.size() - prev_path_size;
+  printf("prev_path_size: %d, prev_used_path: %d\n", prev_path_size,
+         prev_used_path);
+  vector<double> smooth_s;
+  vector<double> smooth_d;
+  double ave_speed = speed_;
+  for (int i = 0; i < trajectory_sd[0].size(); ++i) {
+    double s = trajectory_sd[0][i];
+    double d = trajectory_sd[1][i];
+    // smooth_s.push_back(s);
+    // smooth_d.push_back(d);
+    /* vector<double> xy =
+        getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_); */
+    vector<double> xy = getXY(s, d);
+    // double dist = (i == 0) ? distance(xy[0], xy[1], x_, y_)
+    //                        : distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
+    // double new_speed = dist / TIME_STEP;
+    // if (new_speed > MAX_VEL) {
+    // Smooth this point
+    // }
     /* if (!prev_xy.empty()) {
       double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
       printf("x: %f, y: %f, dist: %f, dist_s: %f\n", xy[0], xy[1], dist,
@@ -289,6 +355,106 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     next_x_vals.push_back(xy[0]);
     next_y_vals.push_back(xy[1]);
   }
+  prev_trajectory_s_ = trajectory_sd[0];
+  prev_trajectory_d_ = trajectory_sd[1];
+}
+
+void Vehicle::generate_splines() {
+  int num_points = map_waypoints_x_.size();
+  for (int i = 0; i < num_points; i++) {
+    // fit spline with 6 points
+    // the target point is p2
+    int p0 = (i - 2 + num_points) % num_points;
+    int p1 = (i - 1 + num_points) % num_points;
+    int p2 = (i + num_points) % num_points;
+    int p3 = (i + 1 + num_points) % num_points;
+    int p4 = (i + 2 + num_points) % num_points;
+    int p5 = (i + 3 + num_points) % num_points;
+
+    vector<double> X = {map_waypoints_x_[p0], map_waypoints_x_[p1],
+                        map_waypoints_x_[p2], map_waypoints_x_[p3],
+                        map_waypoints_x_[p4], map_waypoints_x_[p5]};
+    vector<double> Y = {map_waypoints_y_[p0], map_waypoints_y_[p1],
+                        map_waypoints_y_[p2], map_waypoints_y_[p3],
+                        map_waypoints_y_[p4], map_waypoints_y_[p5]};
+
+    // affine transformation
+    double x_shift = X[2];
+    double y_shift = Y[2];
+    double theta = atan2(Y[3] - Y[2], X[3] - X[2]);
+
+    int num_spline_points = X.size();
+    vector<double> _X(num_spline_points), _Y(num_spline_points);
+    for (int i = 0; i < num_spline_points; i++) {
+      // translate P0 to origin
+      double x_t = X[i] - x_shift;
+      double y_t = Y[i] - y_shift;
+      _X[i] = x_t * cos(-theta) - y_t * sin(-theta);
+      _Y[i] = x_t * sin(-theta) + y_t * cos(-theta);
+    }
+
+    tk::spline spline_func;
+    spline_func.set_points(_X, _Y);
+    global_splines.push_back(spline_func);
+  }
+}
+
+// Transform from Frenet s,d coordinates to Cartesian x,y
+vector<double> Vehicle::getXY(double s, double d) {
+  assert(0.0 <= s && s <= MAX_S);
+  int num_points = map_waypoints_x_.size();
+  // should generate splines before getXY;
+  assert(num_points == global_splines.size());
+
+  int prev_wp = -1;
+
+  while (s > map_waypoints_s_[prev_wp + 1] &&
+         (prev_wp < (int)(map_waypoints_s_.size() - 1))) {
+    prev_wp++;
+  }
+  // handle last waypoin
+  if (prev_wp == -1) {
+    prev_wp = map_waypoints_x_.size() - 1;
+  }
+
+  int wp2 = (prev_wp + 1) % map_waypoints_x_.size();
+
+  // fit spline
+  auto spline_func = global_splines[prev_wp];
+  // handle next_wp == 0 (s[0] will be 0.0)
+  double next_wp_s = map_waypoints_s_[wp2];
+  if (next_wp_s == 0.0) {
+    next_wp_s = MAX_S;
+  }
+  double ratio =
+      (s - map_waypoints_s_[prev_wp]) / (next_wp_s - map_waypoints_s_[prev_wp]);
+
+  // Points in car coordinates on prev_wp
+  double x0 = map_waypoints_x_[prev_wp];
+  double x1 = map_waypoints_x_[wp2];
+  double y0 = map_waypoints_y_[prev_wp];
+  double y1 = map_waypoints_y_[wp2];
+  double dx = x1 - x0;
+  double dy = y1 - y0;
+  double theta = atan2(dy, dx);
+
+  double _x = ratio * sqrt(dx * dx + dy * dy);
+  double _y = spline_func(_x);
+
+  double x, y;
+  // revert affine transformation
+  x = x0 + _x * cos(theta) - _y * sin(theta);
+  y = y0 + _x * sin(theta) + _y * cos(theta);
+
+  // add d * unit norm vector
+  double nx = map_waypoints_dx_[prev_wp] +
+              ratio * (map_waypoints_dx_[wp2] - map_waypoints_dx_[prev_wp]);
+  double ny = map_waypoints_dy_[prev_wp] +
+              ratio * (map_waypoints_dy_[wp2] - map_waypoints_dy_[prev_wp]);
+  x = x + d * nx;
+  y = y + d * ny;
+
+  return {x, y};
 }
 
 std::vector<std::string> Vehicle::successor_states() {
@@ -635,8 +801,9 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory_to_lane_v1(
 
   vector<double> trajectory_s;
   vector<double> trajectory_d;
-  int keep_prev_size = 50;
-  if (prev_path_size >= keep_prev_size) {
+  int keep_prev_size = (target_lane == lane_) ? /* prev_path_size */ 50
+                                              : /* prev_path_size / 3 */ 25;
+  if (prev_path_size > 0 && prev_path_size >= keep_prev_size) {
     auto s_start = prev_trajectory_s_.begin() +
                    (prev_trajectory_s_.size() - prev_path_size);
     auto s_end = s_start + keep_prev_size;
@@ -645,6 +812,12 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory_to_lane_v1(
     auto d_end = d_start + keep_prev_size;
     trajectory_s.insert(trajectory_s.begin(), s_start, s_end);
     trajectory_d.insert(trajectory_d.begin(), d_start, d_end);
+    /* printf("keep_prev_size: %d, trajectory_s size: %d\n", keep_prev_size,
+           trajectory_s.size()); */
+    /* printf("s_: %f\n", s_);
+    for (int i = 0; i < trajectory_s.size(); ++i) {
+      printf("s: %f\n", trajectory_s[i]);
+    } */
   }
 
   vector<double> start_s(3, 0.0);
@@ -682,44 +855,49 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory_to_lane_v1(
   int total_step = PREDICTION_TIME / TIME_STEP;
   int vehicle_ahead_id = get_vehicle_ahead(target_lane, traffics);
   end_s[0] = s_ + 100.0;
-  end_s[1] = (speed_ <= 0.1) ? 0.5 : std::min(MAX_VEL, start_s[1] * 1.2);
+  // end_s[1] = (speed_ <= 0.1) ? 0.5 : std::min(MAX_VEL, start_s[1] * 1.2);
+  end_s[1] = MAX_VEL;
   end_d[0] = (target_lane + 0.5) * LANE_WIDTH;
   if (target_lane != lane_) {
+    double speed_d = 0.5;
     if (target_lane > lane_) {
-      end_d[1] = 0.3;
-      end_d[2] = 0.3;
+      end_d[1] = speed_d;
+      // end_d[2] = 0.3;
     } else {
-      end_d[1] = -0.3;
-      end_d[2] = -0.3;
+      end_d[1] = -speed_d;
+      // end_d[2] = -0.3;
     }
   } else {
-    end_d[1] = 0.0;
+    end_d[1] = 0.1;
     end_d[2] = 0.0;
   }
-  printf("generate lane: %d\n", target_lane);
+  // printf("generate lane: %d\n", target_lane);
   if (vehicle_ahead_id >= 0) {
     Vehicle vehicle = traffics[vehicle_ahead_id];
     double predict_time = (total_step - keep_prev_size) * TIME_STEP;
-    double collision_time_1 = 1.0;
-    double collision_time_2 = 2.0;
+    double collision_time_1 = 3.0;
+    double collision_time_2 = 4.0;
     double vehicle_s1 = vehicle.s_ + vehicle.speed_ * collision_time_1;
     double vehicle_s2 = vehicle.s_ + vehicle.speed_ * collision_time_2;
     double ego_s1 = s_ + speed_ * collision_time_1 + 25.0;
     double ego_s2 = s_ + speed_ * collision_time_2 + 25.0;
-    printf("ego_1: %f, ego_2: %f\n", ego_s1, ego_s1);
-    printf("vehicle1: %f, vehicle2: %f\n", vehicle_s1, vehicle_s2);
+    // printf("ego_1: %f, ego_2: %f\n", ego_s1, ego_s1);
+    // printf("vehicle1: %f, vehicle2: %f\n", vehicle_s1, vehicle_s2);
     if (vehicle_s1 <= ego_s1) {
-      printf("Far away vehicle\n");
+      // printf("Far away vehicle\n");
       end_s[1] = std::min(end_s[1], vehicle.speed_ * 0.8);
     } else if (vehicle_s2 <= ego_s2) {
-      printf("Follow vehicle\n");
+      // printf("Follow vehicle\n");
       end_s[1] = std::min(end_s[1], vehicle.speed_);
     }
   }
   end_s[2] = 0.0;
+  /* if (start_s[1] < 10.0) {
+    end_s[2] = 5.0;
+  } */
   // end_d[2] = 0.0;
-  printf("s, start: %f, %f, %f\n", start_s[0], start_s[1], start_s[2]);
-  printf("s: end: %f, %f, %f\n", end_s[0], end_s[1], end_s[2]);
+  // printf("s, start: %f, %f, %f\n", start_s[0], start_s[1], start_s[2]);
+  // printf("s: end: %f, %f, %f\n", end_s[0], end_s[1], end_s[2]);
   // printf("d, start: %f, %f, %f\n", start_d[0], start_d[1], start_d[2]);
   // printf("d: end: %f, %f, %f\n\n", end_d[0], end_d[1], end_d[2]);
 
@@ -737,8 +915,8 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory_to_lane_v1(
     }
   }
 
-  printf("candidate_s_jmt_params size: %d\n", candidate_s_jmt_params.size());
-  printf("candidate_d_jmt_params size: %d\n", candidate_d_jmt_params.size());
+  // printf("candidate_s_jmt_params size: %u\n", candidate_s_jmt_params.size());
+  // printf("candidate_d_jmt_params size: %u\n", candidate_d_jmt_params.size());
   if (!candidate_s_jmt_params.empty() && !candidate_d_jmt_params.empty()) {
     // Choose the best jmt_s_params
     int best_s_idx = 0;
@@ -748,6 +926,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory_to_lane_v1(
       vector<double> s_vel_coeffs = derivative(s_coeffs);
       double t = (total_step - keep_prev_size) * TIME_STEP;
       double speed = poly_eval(t, s_vel_coeffs);
+      // printf("expected speed: %f\n", speed);
       if (fabs(end_s[1] - speed) < min_target_s_speed_diff) {
         min_target_s_speed_diff = fabs(end_s[1] - speed);
         best_s_idx = i;
@@ -981,7 +1160,7 @@ int Vehicle::get_vehicle_ahead(int target_lane,
 }
 
 std::vector<double> Vehicle::jerk_minimize_trajectory(
-    std::vector<double> &start, std::vector<double> &end, double dt) {
+    std::vector<double> &start, std::vector<double> &end, double T) {
   /**
    * Calculate the Jerk Minimizing Trajectory that connects the initial state
    * to the final state in time dt.
@@ -1001,7 +1180,7 @@ std::vector<double> Vehicle::jerk_minimize_trajectory(
    *   > JMT([0, 10, 0], [10, 10, 0], 1)
    *     [0.0, 10.0, 0.0, 0.0, 0.0, 0.0]
    */
-  vector<double> answer(6, 0.0);
+  /* vector<double> answer(6, 0.0);
   answer[0] = start[0];
   answer[1] = start[1];
   answer[2] = 0.5 * start[2];
@@ -1017,9 +1196,9 @@ std::vector<double> Vehicle::jerk_minimize_trajectory(
   answer[4] = x[1];
   answer[5] = x[2];
 
-  return answer;
+  return answer; */
 
-  /* MatrixXd A = MatrixXd(3, 3);
+  MatrixXd A = MatrixXd(3, 3);
   A << T * T * T, T * T * T * T, T * T * T * T * T, 3 * T * T, 4 * T * T * T,
       5 * T * T * T * T, 6 * T, 12 * T * T, 20 * T * T * T;
 
@@ -1036,5 +1215,5 @@ std::vector<double> Vehicle::jerk_minimize_trajectory(
     result.push_back(C.data()[i]);
   }
 
-  return result; */
+  return result;
 }
