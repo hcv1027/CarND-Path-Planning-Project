@@ -12,8 +12,8 @@ using Eigen::MatrixXd;
 using Eigen::Vector3d;
 using std::cout;
 using std::endl;
-using std::pow;
 using std::list;
+using std::pow;
 using std::unordered_map;
 
 const double Vehicle::MAX_VEL = 21.45;
@@ -153,7 +153,8 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
           printf("id: %d, s: %f, s1: %f\n", iter->first, s, s1);
         }
         // double dist = distance(x1, y1, xy[0], xy[1]);
-        if (ego_lane == vehicle_lane && s < s1 && s1 < s + 25.0) {
+        if (ego_lane == vehicle_lane &&
+            ((s <= s1 && s1 <= s + 25.0) || (s1 <= s && s <= s1 + 25.0))) {
           printf("collide, id: %d, i: %d, s: %f, s1: %f\n", iter->first, i, s,
                  s1);
           return cost;
@@ -165,6 +166,26 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
 
   auto lane_change_cost = [&](int target_lane) {
     const double cost = 4.0;
+    int id_1 = get_vehicle_behind(target_lane, traffics);
+    int id_2 = get_vehicle_ahead(target_lane, traffics);
+    bool dangerous = false;
+    if (id_1 >= 0) {
+      Vehicle &vehicle = traffics[id_1];
+      printf("behind: %f\n", s_ - vehicle.s_);
+      if (s_ - vehicle.s_ <= 20.0) {
+        dangerous = true;
+      }
+    }
+    if (id_2 >= 0) {
+      Vehicle &vehicle = traffics[id_2];
+      printf("ahead: %f\n", vehicle.s_ - s_);
+      if (vehicle.s_ - s_ <= 20.0) {
+        dangerous = true;
+      }
+    }
+    if (dangerous) {
+      return 100.0;
+    }
     if (target_lane == (lane_ + 1) || target_lane == (lane_ - 1)) {
       return 2.5;
     } else if (target_lane == (lane_ + 2) || target_lane == (lane_ - 2)) {
@@ -179,8 +200,9 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     if (id >= 0) {
       Vehicle &vehicle = traffics[id];
       double prev_s_dist =
-          (prev_trajectory_s_.empty()) ? 0.0 : *(prev_trajectory_s_.rbegin()) -
-                                                   prev_trajectory_s_[0];
+          (prev_trajectory_s_.empty())
+              ? 0.0
+              : *(prev_trajectory_s_.rbegin()) - prev_trajectory_s_[0];
       if (MAX_VEL >= vehicle.speed_ && vehicle.s_ < s_ + prev_s_dist) {
         return MAX_VEL - vehicle.speed_;
       }
@@ -336,9 +358,9 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     double d = trajectory_sd[1][i];
     // smooth_s.push_back(s);
     // smooth_d.push_back(d);
-    /* vector<double> xy =
-        getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_); */
-    vector<double> xy = getXY(s, d);
+    vector<double> xy =
+        getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+    // vector<double> xy = getXY_1(s, d);
     // double dist = (i == 0) ? distance(xy[0], xy[1], x_, y_)
     //                        : distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
     // double new_speed = dist / TIME_STEP;
@@ -400,7 +422,7 @@ void Vehicle::generate_splines() {
 }
 
 // Transform from Frenet s,d coordinates to Cartesian x,y
-vector<double> Vehicle::getXY(double s, double d) {
+vector<double> Vehicle::getXY_1(double s, double d) {
   assert(0.0 <= s && s <= MAX_S);
   int num_points = map_waypoints_x_.size();
   // should generate splines before getXY;
@@ -1117,8 +1139,8 @@ std::vector<std::vector<double>> Vehicle::lane_change_trajectory(
   return trajectory;
 }
 
-/* int Vehicle::get_vehicle_behind(const unordered_map<int, Vehicle> &traffics)
-{
+int Vehicle::get_vehicle_behind(int target_lane,
+                                const unordered_map<int, Vehicle> &traffics) {
   // Returns a true if a vehicle is found behind the current vehicle, false
   //   otherwise. The passed reference rVehicle is updated if a vehicle is
   //   found.
@@ -1129,14 +1151,14 @@ std::vector<std::vector<double>> Vehicle::lane_change_trajectory(
     double s = vehicle.s_;
     double d = vehicle.d_;
     double lane = vehicle.lane_;
-    if (lane == this->lane_ && s < this->s_ && s > max_s) {
+    if (lane == target_lane && s < this->s_ && s > max_s) {
       max_s = s;
       id = vehicle.id_;
     }
   }
 
   return id;
-} */
+}
 
 int Vehicle::get_vehicle_ahead(int target_lane,
                                const unordered_map<int, Vehicle> &traffics) {

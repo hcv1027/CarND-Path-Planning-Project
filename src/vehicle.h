@@ -89,7 +89,7 @@ class Vehicle {
                       std::vector<double> &next_y_vals, int prev_path_size,
                       std::unordered_map<int, Vehicle> &traffics);
 
-  std::vector<double> getXY(double s, double d);
+  std::vector<double> getXY_1(double s, double d);
   void generate_splines();
 
   std::vector<std::string> successor_states();
@@ -121,8 +121,8 @@ class Vehicle {
       std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
       int prev_path_size);
 
-  //   int get_vehicle_behind(int target_lane,
-  //                          const std::unordered_map<int, Vehicle> &traffics);
+  int get_vehicle_behind(int target_lane,
+                         const std::unordered_map<int, Vehicle> &traffics);
   int get_vehicle_ahead(int target_lane,
                         const std::unordered_map<int, Vehicle> &traffics);
 
