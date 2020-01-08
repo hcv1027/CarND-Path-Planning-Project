@@ -84,6 +84,7 @@ int main() {
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];  // Unit is MPH
+          std::cout << "--------------------" << std::endl;
           printf("curr xy: (%f, %f), speed: %f\n", car_x, car_y,
                  mph2ms(car_speed));
 
@@ -97,7 +98,7 @@ int main() {
             point.push_back(previous_path_y[i]);
             prev_path.push_back(point);
           }
-          std::cout << "--------------------" << std::endl;
+
           // std::cout << "prev_path size: " << prev_path.size() << std::endl;
           // Previous path's end s and d values
           double end_path_s = j[1]["end_path_s"];
@@ -143,6 +144,8 @@ int main() {
                                    mph2ms(car_speed));
           ego_vehicle.get_trajectory(next_x_vals, next_y_vals,
                                      previous_path_x.size(), traffics);
+          // next_x_vals.clear();
+          // next_y_vals.clear();
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

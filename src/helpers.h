@@ -176,30 +176,17 @@ int get_lane_from_d(double d) {
   return -1;
 }
 
-double round_frenet_s(double s) {
-  if (s >= 6945.554) {
-    s -= 6945.554;
+double round_frenet_s(double s, const double max_s = 6945.554) {
+  while (s >= max_s) {
+    s -= max_s;
   }
   return s;
 }
 
-double TIME_STEP = 0.02;
-// check whether the JMT coefficients will break the car limits
-// within check_duration
-/* bool check_is_s_JMT_good(vector<double> jmt_coeffs, double check_duration) {
-  auto v_coeffs = derivative(jmt_coeffs);
-  auto a_coeffs = derivative(v_coeffs);
-  auto jerk_coeffs = derivative(a_coeffs);
-  for (double t = TIME_STEP; t <= check_duration; t += TIME_STEP) {
-    double v = poly_eval(t, v_coeffs);
-    double a = abs(poly_eval(t, a_coeffs));
-    double jerk = abs(poly_eval(t, jerk_coeffs));
-    if (v > SPEED_LIMIT || v < 0.0 || a > MAX_ACC || jerk > MAX_JERK) {
-      return false;
-    }
-  }
-  return true;
-} */
+double s_distance(double s1, double s2, double max_s) {
+  double s_diff = fabs(s1 - s2);
+  return std::min(s_diff, max_s - s_diff);
+}
 
 }  // namespace
 

@@ -26,6 +26,7 @@ class Vehicle {
   static const double VEHICLE_RADIUS;  // Unit: 5.0 m
   static const int LANE_AVAILABLE = 3;
   static const double MAX_S;
+  static const double HALF_MAX_S;
   static const double LANE_WIDTH;  // Unit: 4.0 m
   static const double COLLISION_THRESHOLD;
   // Define some useful constant values
@@ -33,24 +34,14 @@ class Vehicle {
   static const double PREDICTION_TIME;
   static const double TIME_STEP;
 
-  enum State { KL = 0, LCL = 1, LCR = 2 };
-  /* const std::unordered_map<std::string, int> LANE_DIRECTION = {
-      {"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1}}; */
-
  private:
   int id_;
-
-  State state_;
   double x_;
   double y_;
   double s_;
   double d_;
   double yaw_;
   double speed_;  // Unit: m/s
-  double s_vel_;  // Unit: m/s
-  double d_vel_;  // Unit: m/s
-  double s_acc_;  // Unit: m/s^2
-  double d_acc_;  // Unit: m/s^2
   std::vector<double> prev_trajectory_s_;
   std::vector<double> prev_trajectory_d_;
   // Used by other vehicle detected by sensor
@@ -58,8 +49,8 @@ class Vehicle {
   double y_vel_;  // Unit: m/s
   int lane_;
   int target_lane_;
-  std::vector<tk::spline> global_splines;
 
+  std::vector<tk::spline> global_splines;
   std::vector<double> map_waypoints_x_;
   std::vector<double> map_waypoints_y_;
   std::vector<double> map_waypoints_s_;
@@ -71,10 +62,6 @@ class Vehicle {
   Vehicle(int id, double x, double y, double x_vel, double y_vel, double s,
           double d);
   ~Vehicle() {}
-
-  void show_info();
-  double x() { return x_; }
-  double y() { return y_; }
 
   void set_map(const std::vector<double> &map_waypoints_x,
                const std::vector<double> &map_waypoints_y,
@@ -89,46 +76,26 @@ class Vehicle {
                       std::vector<double> &next_y_vals, int prev_path_size,
                       std::unordered_map<int, Vehicle> &traffics);
 
-  std::vector<double> getXY_1(double s, double d);
+  std::vector<double> getXY_smooth(double s, double d);
   void generate_splines();
-
-  std::vector<std::string> successor_states();
-
-  //   std::string get_next_state();
 
   // Predict the trajectory in PREDICTION_TIME seconds
   // Return format: prediction[i] = {s, d}
   std::vector<std::vector<double>> get_prediction();
 
-  std::vector<std::vector<double>> generate_trajectory_to_lane(
-      int target_lane, std::unordered_map<int, Vehicle> &traffics,
-      int prev_path_size);
-
-  std::vector<std::vector<double>> generate_trajectory_to_lane_v1(
-      int target_lane, std::unordered_map<int, Vehicle> &traffics,
-      int prev_path_size);
-
   std::vector<std::vector<double>> generate_trajectory(
-      std::string state,
-      std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
+      int target_lane, std::unordered_map<int, Vehicle> &traffics,
       int prev_path_size);
 
-  std::vector<std::vector<double>> keep_lane_trajectory(
-      std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
-      int prev_path_size);
-
-  std::vector<std::vector<double>> lane_change_trajectory(
-      std::unordered_map<int, std::vector<std::vector<double>>> &prediction,
-      int prev_path_size);
-
+  static bool is_vehicle_ahead(double s1, double s2);
   int get_vehicle_behind(int target_lane,
                          const std::unordered_map<int, Vehicle> &traffics);
   int get_vehicle_ahead(int target_lane,
                         const std::unordered_map<int, Vehicle> &traffics);
 
-  std::vector<double> jerk_minimize_trajectory(std::vector<double> &start,
-                                               std::vector<double> &end,
-                                               double dt);
+  // Jerk minimize trajectory
+  std::vector<double> jmt(std::vector<double> &start, std::vector<double> &end,
+                          double dt);
 };
 
 #endif  // VEHICLE_H
