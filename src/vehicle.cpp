@@ -27,6 +27,7 @@ const double Vehicle::HALF_MAX_S = MAX_S / 2.0;
 const double Vehicle::COLLISION_THRESHOLD = 10.0;
 const double Vehicle::PREDICTION_TIME = 3.0;
 const double Vehicle::TIME_STEP = 0.02;
+const int Vehicle::TOTAL_STEP = PREDICTION_TIME / TIME_STEP;
 
 Vehicle::Vehicle() { target_lane_ = -1; }
 
@@ -245,19 +246,16 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     printf("Change to %d\n", target_lane_);
   }
 
-  /* tk::spline spline_func;
-  vector<double> sample_x;
-  vector<double> sample_y;
-  vector<vector<double>> sample_xy;
-  double s0 = trajectory_sd[0][0];
-  double d0 = trajectory_sd[1][0];
-  vector<double> xy0 =
-      getXY(s0, d0, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
-  double yaw = atan2(xy0[1] - y_, xy0[0] - x_);
-  double cos_yaw = cos(-yaw);
-  double sin_yaw = sin(-yaw);
+  // double s0 = trajectory_sd[0][0];
+  // double d0 = trajectory_sd[1][0];
+  // vector<double> xy0 =
+  //     getXY(s0, d0, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+  // double yaw = atan2(xy0[1] - y_, xy0[0] - x_);
+  /* vector<vector<double>> sample_xy;
+  double cos_yaw = cos(-yaw_);
+  double sin_yaw = sin(-yaw_);
   double total_dist = 0.0;
-  vector<double> prev_xy = {x_, y_};
+  vector<double> prev_xy = {0.0, 0.0};
   // printf("yaw: %f, cos: %f, sin: %f\n", yaw, cos_yaw, sin_yaw);
   for (int i = 0; i < trajectory_sd[0].size(); i += 30) {
     double s = trajectory_sd[0][i];
@@ -266,12 +264,11 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
         getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
     double dx = xy[0] - x_;
     double dy = xy[1] - y_;
-    double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
-    total_dist += dist;
-    prev_xy = xy;
-
     double local_x = dx * cos_yaw - dy * sin_yaw;
     double local_y = dx * sin_yaw + dy * cos_yaw;
+    total_dist += distance(local_x, local_y, prev_xy[0], prev_xy[1]);
+    prev_xy[0] = local_x;
+    prev_xy[1] = local_y;
     // sample_x.push_back(local_x);
     // sample_y.push_back(local_y);
     sample_xy.push_back({local_x, local_y});
@@ -283,30 +280,33 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
             [](const vector<double> &a, const vector<double> &b) {
               return a[0] < b[0];
             });
+  vector<double> sample_x;
+  vector<double> sample_y;
   for (vector<double> xy : sample_xy) {
     sample_x.push_back(xy[0]);
     sample_y.push_back(xy[1]);
   }
 
+  tk::spline spline_func;
   spline_func.set_points(sample_x, sample_y);
   int prev_used = prev_trajectory_s_.size() - prev_path_size;
   double prev_s = (prev_path_size > 0) ? prev_trajectory_s_[prev_used - 1] : s_;
-  double total_s = *(trajectory_sd[0].rbegin()) - prev_s;
+  double total_s = s_distance(*(trajectory_sd[0].rbegin()), prev_s, MAX_S);
   double total_x = *(sample_x.rbegin());
   // printf("total s: %f, total x: %f\n", total_s, total_x);
-  cos_yaw = cos(yaw);
-  sin_yaw = sin(yaw);
+  cos_yaw = cos(yaw_);
+  sin_yaw = sin(yaw_);
 
   double prev_x = 0.0;
   double prev_y = 0.0;
   for (int i = 0; i < trajectory_sd[0].size(); ++i) {
-    double ds = trajectory_sd[0][i] - prev_s;
-    printf("s1: %f, s0: %f\n", trajectory_sd[0][i], prev_s);
-
-    double dist_ratio = total_dist * ds / total_s;
-    // printf("dist_ratio: %f, ds: %f, total s: %f\n", dist_ratio, ds, total_s);
+    double s_dist = s_distance(trajectory_sd[0][i], prev_s, MAX_S);
+    // printf("s1: %f, s0: %f\n", trajectory_sd[0][i], prev_s);
+    double dist_ratio = total_dist * s_dist / total_s;
+    // printf("dist_ratio: %f, s_dist: %f, total s: %f\n", dist_ratio, s_dist,
+    // total_s);
     // double min_diff = std::numeric_limits<double>::infinity();
-    double local_x = prev_x + total_x * ds / total_s;
+    double local_x = prev_x + total_x * s_dist / total_s;
     double local_y = spline_func(local_x);
     double min_dist = distance(local_x, local_y, prev_x, prev_y);
     double min_dist_diff = fabs(min_dist - dist_ratio);
@@ -342,16 +342,19 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   prev_trajectory_s_ = trajectory_sd[0];
   prev_trajectory_d_ = trajectory_sd[1]; */
 
-  vector<double> prev_xy;
-  double prev_s;
   int prev_used_path = prev_trajectory_s_.size() - prev_path_size;
-  /* printf("prev_path_size: %d, prev_used_path: %d\n", prev_path_size,
-         prev_used_path); */
+  // printf("prev_path_size: %d, prev_used_path: %d\n", prev_path_size,
+  //        prev_used_path);
   vector<double> smooth_s;
   vector<double> smooth_d;
-  bool use_smooth = true;
-  // bool use_smooth = false;
-  double ave_speed = speed_;
+  vector<double> prev_xy = {x_, y_};
+  double prev_vel = speed_;
+  double prev_acc = 0.0;
+  double prev_s = s_;
+  const int record_size = 10;
+  list<vector<double>> record;
+  // bool use_smooth = true;
+  bool use_smooth = false;
   for (int i = 0; i < trajectory_sd[0].size(); ++i) {
     double s = trajectory_sd[0][i];
     double d = trajectory_sd[1][i];
@@ -360,22 +363,28 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     vector<double> xy;
     if (!use_smooth) {
       xy = getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+
+      // if (i <) {
+      // }
+      double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
+      double vel = dist / TIME_STEP;
+      double acc = (vel - prev_vel) / TIME_STEP;
+      double s_dist = s_distance(s, prev_s, MAX_S);
+
+      if (record.size() > record_size) {
+        record.pop_front();
+      }
+      record.push_back({xy[0], xy[1], vel, acc});
+      printf("xy: %f, %f, dis: %f, vel: %f, acc: %f\n", xy[0], xy[1], dist, vel,
+             acc);
+      prev_xy = xy;
+      prev_s = s;
+      prev_vel = vel;
+      prev_acc = acc;
     } else {
       xy = getXY_smooth(s, d);
     }
-    // double dist = (i == 0) ? distance(xy[0], xy[1], x_, y_)
-    //                        : distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
-    // double new_speed = dist / TIME_STEP;
-    // if (new_speed > MAX_VEL) {
-    // Smooth this point
-    // }
-    /* if (!prev_xy.empty()) {
-      double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
-      printf("x: %f, y: %f, dist: %f, dist_s: %f\n", xy[0], xy[1], dist,
-             s - prev_s);
-    } */
-    prev_xy = xy;
-    prev_s = s;
+
     next_x_vals.push_back(xy[0]);
     next_y_vals.push_back(xy[1]);
   }
@@ -482,13 +491,13 @@ vector<double> Vehicle::getXY_smooth(double s, double d) {
 }
 
 std::vector<std::vector<double>> Vehicle::get_prediction() {
-  int total_step = PREDICTION_TIME / TIME_STEP;
+  // int total_step = PREDICTION_TIME / TIME_STEP;
   // vector<double> s_trajectory;
   // vector<double> d_trajectory;
   vector<vector<double>> prediction = {vector<double>(), vector<double>()};
   double x = x_;
   double y = y_;
-  for (int i = 0; i < total_step; ++i) {
+  for (int i = 0; i < TOTAL_STEP; ++i) {
     double next_x = x + x_vel_ * TIME_STEP;
     double next_y = y + y_vel_ * TIME_STEP;
     double next_yaw = atan2(next_y - y, next_x - x);
@@ -508,7 +517,7 @@ std::vector<std::vector<double>> Vehicle::get_prediction() {
   double elapsed_time = TIME_STEP;
   vector<double> x_trajectory;
   vector<double> y_trajectory;
-  for (int i = 0; i < total_step; ++i) {
+  for (int i = 0; i < TOTAL_STEP; ++i) {
     double next_x = x_ + x_vel_ * elapsed_time;
     double next_y = y_ + y_vel_ * elapsed_time;
     x_trajectory.push_back(next_x);
@@ -643,7 +652,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     start_d[2] = d_acc_0;
   }
 
-  const int total_step = PREDICTION_TIME / TIME_STEP;
+  // const int total_step = PREDICTION_TIME / TIME_STEP;
   end_s[0] = s_ + 100.0;
   // end_s[1] = (speed_ <= 0.1) ? 0.5 : std::min(MAX_VEL, start_s[1] * 1.2);
   end_s[1] = MAX_VEL;
@@ -664,7 +673,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
   printf("generate lane: %d\n", target_lane);
   if (vehicle_ahead_id >= 0) {
     Vehicle &vehicle = traffics[vehicle_ahead_id];
-    double predict_time = (total_step - keep_prev_size) * TIME_STEP;
+    double predict_time = (TOTAL_STEP - keep_prev_size) * TIME_STEP;
     const double time_lv_1 = 1.5;
     const double time_lv_2 = 3.0;
     const double time_lv_3 = 4.0;
@@ -730,7 +739,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     for (int i = 0; i < candidate_s_jmt_params.size(); ++i) {
       vector<double> &s_coeffs = candidate_s_jmt_params[i];
       vector<double> s_vel_coeffs = derivative(s_coeffs);
-      double t = (total_step - keep_prev_size) * TIME_STEP;
+      double t = (TOTAL_STEP - keep_prev_size) * TIME_STEP;
       double speed = poly_eval(t, s_vel_coeffs);
       // printf("expected speed: %f\n", speed);
       if (fabs(end_s[1] - speed) < min_target_s_speed_diff) {
@@ -746,7 +755,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     for (int i = 0; i < candidate_d_jmt_params.size(); ++i) {
       vector<double> &d_coeffs = candidate_d_jmt_params[i];
       vector<double> d_vel_coeffs = derivative(d_coeffs);
-      double t = (total_step - keep_prev_size) * TIME_STEP;
+      double t = (TOTAL_STEP - keep_prev_size) * TIME_STEP;
       double speed = poly_eval(t, d_vel_coeffs);
       if (fabs(end_d[1] - speed) < min_target_d_speed_diff) {
         min_target_d_speed_diff = fabs(end_d[1] - speed);
@@ -755,7 +764,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     }
     vector<double> &final_d_coeffs = candidate_d_jmt_params[best_d_idx];
 
-    for (int i = 0; (i + keep_prev_size) < total_step; ++i) {
+    for (int i = 0; (i + keep_prev_size) < TOTAL_STEP; ++i) {
       double t = (i + 1) * TIME_STEP;
       double s = round_frenet_s(poly_eval(t, final_s_coeffs), MAX_S);
       double d = poly_eval(t, final_d_coeffs);

@@ -33,6 +33,7 @@ class Vehicle {
   static const int PREV_PATH_REUSE = 20;
   static const double PREDICTION_TIME;
   static const double TIME_STEP;
+  static const int TOTAL_STEP;
 
  private:
   int id_;
