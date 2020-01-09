@@ -29,7 +29,11 @@ const double Vehicle::PREDICTION_TIME = 3.0;
 const double Vehicle::TIME_STEP = 0.02;
 const int Vehicle::TOTAL_STEP = PREDICTION_TIME / TIME_STEP;
 
-Vehicle::Vehicle() { target_lane_ = -1; }
+Vehicle::Vehicle() {
+  id_ = -1;
+  target_lane_ = -1;
+  debug_ = true;
+}
 
 Vehicle::Vehicle(int id, double x, double y, double x_vel, double y_vel,
                  double s, double d) {
@@ -55,7 +59,10 @@ void Vehicle::set_map(const std::vector<double> &map_waypoints_x,
   map_waypoints_s_.assign(map_waypoints_s.begin(), map_waypoints_s.end());
   map_waypoints_dx_.assign(map_waypoints_dx.begin(), map_waypoints_dx.end());
   map_waypoints_dy_.assign(map_waypoints_dy.begin(), map_waypoints_dy.end());
-  generate_splines();
+  if (id_ == -1) {
+    generate_splines();
+    generate_wp_spline_fuc(map_waypoints_x_, map_waypoints_y_);
+  }
 }
 
 void Vehicle::update_state(double x, double y, double s, double d, double yaw,
@@ -334,6 +341,66 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   }
   prev_trajectory_s_ = trajectory_sd[0];
   prev_trajectory_d_ = trajectory_sd[1]; */
+  /* if (fabs(x_ - 909.480000) < 0.0001 && fabs(y_ - 1128.670000) < 0.0001) {
+    printf("Set debug\n");
+    debug_ = false;
+    trajectory_sd[0] = {
+        6793.072617, 6793.473818, 6793.875121, 6794.276475, 6794.677928,
+        6795.079478, 6795.481122, 6795.882860, 6796.284689, 6796.686607,
+        6797.088613, 6797.490706, 6797.892841, 6798.295060, 6798.697362,
+        6799.099744, 6799.502204, 6799.904742, 6800.307355, 6800.710042,
+        6801.112802, 6801.515599, 6801.918466, 6802.321403, 6802.724408,
+        6803.127479, 6803.530615, 6803.933816, 6804.337080, 6804.740405,
+        6805.143762, 6805.547182, 6805.950668, 6806.354222, 6806.757845,
+        6807.161540, 6807.565308, 6807.969151, 6808.373071, 6808.777030,
+        6809.181068, 6809.585185, 6809.989384, 6810.393665, 6810.798030,
+        6811.202480, 6811.607017, 6812.011642, 6812.416356, 6812.821162,
+        6813.226013, 6813.630955, 6814.035991, 6814.441119, 6814.846341,
+        6815.251659, 6815.657072, 6816.062582, 6816.468189, 6816.873895,
+        6817.279700, 6817.685606, 6818.091612, 6818.497721, 6818.903933,
+        6819.310248, 6819.716669, 6820.123195, 6820.529828, 6820.936570,
+        6821.343419, 6821.750379, 6822.157449, 6822.564632, 6822.971927,
+        6823.379336, 6823.786859, 6824.194499, 6824.602255, 6825.010129,
+        6825.418122, 6825.826235, 6826.234469, 6826.642824, 6827.051303,
+        6827.459906, 6827.868633, 6828.277487, 6828.686468, 6829.095577,
+        6829.504815, 6829.914183, 6830.323682, 6830.733314, 6831.143078,
+        6831.552977, 6831.963011, 6832.373181, 6832.783487, 6833.193933,
+        6833.604517, 6834.015241, 6834.426106, 6834.837113, 6835.248262,
+        6835.659556, 6836.070994, 6836.482578, 6836.894308, 6837.306185,
+        6837.718211, 6838.130386, 6838.542711, 6838.955187, 6839.367814,
+        6839.780594, 6840.193527, 6840.606613, 6841.019855, 6841.433252,
+        6841.846806, 6842.260516, 6842.674384, 6843.088411, 6843.502596,
+        6843.916942, 6844.331447, 6844.746114, 6845.160942, 6845.575932,
+        6845.991085, 6846.406401, 6846.821881, 6847.237525, 6847.653334,
+        6848.069307, 6848.485447, 6848.901752, 6849.318224, 6849.734862,
+        6850.151668, 6850.568640, 6850.985781, 6851.403089, 6851.820565,
+        6852.238210, 6852.656023, 6853.074004, 6853.492155, 6853.910474};
+    trajectory_sd[1] = {
+        9.923719, 9.923708, 9.923698, 9.923687, 9.923677, 9.923667, 9.923657,
+        9.923647, 9.923636, 9.923626, 9.923617, 9.923607, 9.923598, 9.923589,
+        9.923580, 9.923572, 9.923563, 9.923554, 9.923546, 9.923538, 9.923530,
+        9.923522, 9.923515, 9.923508, 9.923501, 9.923494, 9.923487, 9.923480,
+        9.923474, 9.923467, 9.923462, 9.923456, 9.923451, 9.923445, 9.923440,
+        9.923434, 9.923429, 9.923424, 9.923420, 9.923416, 9.923412, 9.923408,
+        9.923404, 9.923400, 9.923396, 9.923393, 9.923389, 9.923386, 9.923384,
+        9.923382, 9.923381, 9.923381, 9.923381, 9.923382, 9.923382, 9.923383,
+        9.923385, 9.923387, 9.923389, 9.923392, 9.923396, 9.923402, 9.923409,
+        9.923418, 9.923429, 9.923444, 9.923461, 9.923483, 9.923509, 9.923539,
+        9.923576, 9.923619, 9.923669, 9.923726, 9.923792, 9.923867, 9.923952,
+        9.924048, 9.924155, 9.924274, 9.924407, 9.924553, 9.924715, 9.924892,
+        9.925086, 9.925297, 9.925526, 9.925775, 9.926043, 9.926333, 9.926644,
+        9.926978, 9.927336, 9.927717, 9.928124, 9.928557, 9.929017, 9.929504,
+        9.930019, 9.930564, 9.931138, 9.931743, 9.932379, 9.933047, 9.933747,
+        9.934480, 9.935247, 9.936048, 9.936883, 9.937754, 9.938660, 9.939602,
+        9.940580, 9.941594, 9.942645, 9.943733, 9.944858, 9.946021, 9.947220,
+        9.948456, 9.949730, 9.951040, 9.952387, 9.953770, 9.955190, 9.956646,
+        9.958136, 9.959662, 9.961222, 9.962815, 9.964441, 9.966099, 9.967789,
+        9.969508, 9.971256, 9.973033, 9.974836, 9.976665, 9.978518, 9.980393,
+        9.982290, 9.984206, 9.986139, 9.988089, 9.990052, 9.992027, 9.994011,
+        9.996003, 9.998000, 10.000000};
+    lane_ = 2;
+    target_lane_ = 2;
+  } */
 
   int prev_used_path = prev_trajectory_s_.size() - prev_path_size;
   // printf("prev_path_size: %d, prev_used_path: %d\n", prev_path_size,
@@ -355,19 +422,18 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     // smooth_d.push_back(d);
     vector<double> xy;
     if (!use_smooth) {
-      xy = getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_);
+      xy = getXY(s, d, map_waypoints_s_, map_waypoints_x_, map_waypoints_y_,
+                 map_waypoints_dx_, map_waypoints_dy_);
 
-      // if (i <) {
-      // }
       double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
       double vel = dist / TIME_STEP;
       double acc = (vel - prev_vel) / TIME_STEP;
       double s_dist = s_distance(s, prev_s, MAX_S);
 
-      if (record.size() > record_size) {
-        record.pop_front();
-      }
-      record.push_back({xy[0], xy[1], vel, acc});
+      // if (record.size() > record_size) {
+      //   record.pop_front();
+      // }
+      // record.push_back({xy[0], xy[1], vel, acc});
       printf("xy: %f, %f, dis: %f, vel: %f, acc: %f\n", xy[0], xy[1], dist, vel,
              acc);
       prev_xy = xy;
@@ -375,12 +441,34 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
       prev_vel = vel;
       prev_acc = acc;
     } else {
-      xy = getXY_smooth(s, d);
-    }
+      xy = getXY_smooth(s, d, map_waypoints_s_, map_waypoints_x_,
+                        map_waypoints_y_, map_waypoints_dx_, map_waypoints_dy_);
 
+      double dist = distance(xy[0], xy[1], prev_xy[0], prev_xy[1]);
+      double vel = dist / TIME_STEP;
+      double acc = (vel - prev_vel) / TIME_STEP;
+      double s_dist = s_distance(s, prev_s, MAX_S);
+      printf("xy: %f, %f, dis: %f, vel: %f, acc: %f\n", xy[0], xy[1], dist, vel,
+             acc);
+      prev_xy = xy;
+      prev_s = s;
+      prev_vel = vel;
+      prev_acc = acc;
+    }
+    // printf("xy: %f, %f\n", xy[0], xy[1]);
     next_x_vals.push_back(xy[0]);
     next_y_vals.push_back(xy[1]);
   }
+  /* printf("----------------------\n");
+  printf("s: \n");
+  for (double s : trajectory_sd[0]) {
+    printf("%f, ", s);
+  }
+  printf("\nd: \n");
+  for (double d : trajectory_sd[1]) {
+    printf("%f, ", d);
+  }
+  printf("\n"); */
   prev_trajectory_s_ = trajectory_sd[0];
   prev_trajectory_d_ = trajectory_sd[1];
 }
@@ -425,9 +513,56 @@ void Vehicle::generate_splines() {
   }
 }
 
+void Vehicle::generate_wp_spline_fuc(const vector<double> &maps_x,
+                                     const vector<double> &maps_y) {
+  const int wp_size = maps_x.size();
+  for (int wp_idx = 0; wp_idx < wp_size; ++wp_idx) {
+    int wp2 = (wp_idx + 1) % wp_size;
+    const double theta =
+        atan2((maps_y[wp2] - maps_y[wp_idx]), (maps_x[wp2] - maps_x[wp_idx]));
+    const double x0 = maps_x[wp_idx];
+    const double y0 = maps_y[wp_idx];
+    printf("generate %d spline func, xy: (%f, %f)\n", wp_idx, x0, y0);
+    const double cos_theta = std::cos(-theta);
+    const double sin_theta = std::sin(-theta);
+
+    const int spline_size = 6;
+    vector<vector<double>> xy_sample;
+    for (int i = 0; i < spline_size; ++i) {
+      int idx = (wp_idx + (i - 2) + wp_size) % wp_size;
+      double global_x = maps_x[idx];
+      double global_y = maps_y[idx];
+      double dx = global_x - x0;
+      double dy = global_y - y0;
+      double local_x = dx * cos_theta - dy * sin_theta;
+      double local_y = dx * sin_theta + dy * cos_theta;
+      xy_sample.push_back({local_x, local_y});
+    }
+    std::sort(xy_sample.begin(), xy_sample.end(),
+              [](const vector<double> &xy1, const vector<double> &xy2) {
+                return xy1[0] < xy2[0];
+              });
+    vector<double> x_sample;
+    vector<double> y_sample;
+    for (vector<double> xy : xy_sample) {
+      x_sample.push_back(xy[0]);
+      y_sample.push_back(xy[1]);
+    }
+    tk::spline spline_func;
+    spline_func.set_points(x_sample, y_sample);
+    wp_spline_func_[wp_idx] = spline_func;
+  }
+  // printf("wp_spline_func size: %d\n", wp_spline_func.size());
+}
+
 // Transform from Frenet s,d coordinates to Cartesian x,y
-vector<double> Vehicle::getXY_smooth(double s, double d) {
-  assert(0.0 <= s && s <= MAX_S);
+vector<double> Vehicle::getXY_smooth(double s, double d,
+                                     const vector<double> &maps_s,
+                                     const vector<double> &maps_x,
+                                     const vector<double> &maps_y,
+                                     const vector<double> &maps_dx,
+                                     const vector<double> &maps_dy) {
+  /* assert(0.0 <= s && s <= MAX_S);
   int num_points = map_waypoints_x_.size();
   // should generate splines before getXY;
   assert(num_points == global_splines.size());
@@ -480,7 +615,52 @@ vector<double> Vehicle::getXY_smooth(double s, double d) {
   x = x + d * nx;
   y = y + d * ny;
 
-  return {x, y};
+  return {x, y}; */
+
+  const int wp_size = maps_s.size();
+  int prev_wp = -1;
+  while (s > maps_s[prev_wp + 1] && (prev_wp < wp_size - 1)) {
+    ++prev_wp;
+  }
+
+  int wp2 = (prev_wp + 1) % maps_x.size();
+  const double theta =
+      atan2((maps_y[wp2] - maps_y[prev_wp]), (maps_x[wp2] - maps_x[prev_wp]));
+  const double x0 = maps_x[prev_wp];
+  const double y0 = maps_y[prev_wp];
+  const double x1 = maps_x[wp2];
+  const double y1 = maps_y[wp2];
+  const double dist = distance(x0, y0, x1, y1);
+  printf("xy0: (%f, %f), xy1: (%f, %f)\n", x0, y0, x1, y1);
+  const double cos_theta = std::cos(theta);
+  const double sin_theta = std::sin(theta);
+  auto spline_func = wp_spline_func_[prev_wp];
+
+  double s_d1 = s_distance(s, maps_s[prev_wp], MAX_S);
+  double s_d2 = s_distance(maps_s[wp2], maps_s[prev_wp], MAX_S);
+  double s_ratio = s_d1 / s_d2;
+  /* double s_ratio = s_distance(s, maps_s[prev_wp], MAX_S) /
+                   s_distance(maps_s[wp2], maps_s[prev_wp], MAX_S); */
+  printf("prev, maps_s[%d] = %f\n", prev_wp, maps_s[prev_wp]);
+  printf("wp2, maps_s[%d] = %f\n", wp2, maps_s[wp2]);
+  printf("s_d1: %f, s_d2: %f\n", s_d1, s_d2);
+  if (s_ratio > 1.0) {
+    s_ratio = 1.0;
+  }
+
+  double local_x = dist * s_ratio;
+  printf("s: %f, s_ratio: %f, dist: %f, local_x: %f\n", s, s_ratio, dist,
+         local_x);
+  double local_y = spline_func(local_x);
+  // printf("local xy: %f, %f\n", local_x, local_y);
+  // double theta1 = atan2(local_y, local_x);
+  // printf("theta1: %f, deriv: %f\n", theta1, spline_func.deriv(1, local_x));
+  double nx = maps_dx[prev_wp] + s_ratio * (maps_dx[wp2] - maps_dx[prev_wp]);
+  double ny = maps_dy[prev_wp] + s_ratio * (maps_dy[wp2] - maps_dy[prev_wp]);
+  double global_x = x0 + local_x * cos_theta - local_y * sin_theta + d * nx;
+  double global_y = y0 + local_x * sin_theta + local_y * cos_theta + d * ny;
+
+  return {global_x, global_y};
 }
 
 std::vector<std::vector<double>> Vehicle::get_prediction() {
@@ -670,7 +850,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     const double time_lv_1 = 1.5;
     const double time_lv_2 = 3.0;
     const double time_lv_3 = 4.0;
-    const double buffer = 25.0;
+    const double buffer = 30.0;
 
     double vehicle_s1 =
         round_frenet_s(vehicle.s_ + vehicle.speed_ * time_lv_1, MAX_S);

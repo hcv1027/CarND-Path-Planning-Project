@@ -43,6 +43,7 @@ class Vehicle {
   double d_;
   double yaw_;
   double speed_;  // Unit: m/s
+  bool debug_;
   std::vector<double> prev_trajectory_s_;
   std::vector<double> prev_trajectory_d_;
   // Used by other vehicle detected by sensor
@@ -52,6 +53,7 @@ class Vehicle {
   int target_lane_;
 
   std::vector<tk::spline> global_splines;
+  std::unordered_map<int, tk::spline> wp_spline_func_;
   std::vector<double> map_waypoints_x_;
   std::vector<double> map_waypoints_y_;
   std::vector<double> map_waypoints_s_;
@@ -77,8 +79,15 @@ class Vehicle {
                       std::vector<double> &next_y_vals, int prev_path_size,
                       std::unordered_map<int, Vehicle> &traffics);
 
-  std::vector<double> getXY_smooth(double s, double d);
+  std::vector<double> getXY_smooth(double s, double d,
+                                   const std::vector<double> &maps_s,
+                                   const std::vector<double> &maps_x,
+                                   const std::vector<double> &maps_y,
+                                   const std::vector<double> &maps_dx,
+                                   const std::vector<double> &maps_dy);
   void generate_splines();
+  void generate_wp_spline_fuc(const std::vector<double> &maps_x,
+                              const std::vector<double> &maps_y);
 
   // Predict the trajectory in PREDICTION_TIME seconds
   // Return format: prediction[i] = {s, d}

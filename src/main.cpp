@@ -53,6 +53,7 @@ int main() {
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
+  // generate_wp_spline_fuc(wp_spline_func, map_waypoints_x, map_waypoints_y);
 
   // Initialize out ego vehicle
   Vehicle ego_vehicle;
