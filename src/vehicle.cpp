@@ -105,17 +105,21 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
 
   // Generate all possible trajectory
   vector<int> target_lanes;
-  /* if (lane_ == target_lane_) {
-    for (int i = 0; i < LANE_AVAILABLE; ++i) {
-      target_lanes.push_back(i);
-    }
-  } else {
-    target_lanes.push_back(lane_);
-    target_lanes.push_back(target_lane_);
-  } */
-  for (int i = 0; i < LANE_AVAILABLE; ++i) {
+  /* for (int i = 0; i < LANE_AVAILABLE; ++i) {
     target_lanes.push_back(i);
+  } */
+  if (lane_ == 0) {
+    target_lanes.push_back(lane_);
+    target_lanes.push_back(lane_ + 1);
+  } else if (lane_ == LANE_AVAILABLE) {
+    target_lanes.push_back(lane_ - 1);
+    target_lanes.push_back(lane_);
+  } else {
+    target_lanes.push_back(lane_ - 1);
+    target_lanes.push_back(lane_);
+    target_lanes.push_back(lane_ + 1);
   }
+
   std::unordered_map<int, vector<vector<double>>> trajectories;
   for (int i = 0; i < target_lanes.size(); ++i) {
     int target_lane = target_lanes[i];
@@ -147,12 +151,6 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
                  iter->first, (i + 1) * TIME_STEP, s0, s1);
           return 100.0;
         }
-        /* if (ego_lane == vehicle_lane &&
-            ((s0 <= s1 && s1 <= s0 + 25.0) || (s1 <= s0 && s0 <= s1 + 25.0))) {
-          printf("collide, id: %d, i: %d, s: %f, s1: %f\n", iter->first, i, s0,
-                 s1);
-          return 100.0;
-        } */
       }
     }
     return 0.0;
@@ -225,19 +223,23 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     int target_lane = iter->first;
     vector<vector<double>> &trajectory = iter->second;
     printf("Check lane: %d\n", target_lane);
-    double cost1 = collision_cost(trajectory);
-    printf("collision cost: %f\n", cost1);
-    double cost2 = lane_change_cost(target_lane);
-    printf("change lane cost: %f\n", cost2);
-    double cost3 = speed_limit_cost(target_lane, trajectory);
-    printf("speed cost: %f\n", cost3);
-    double cost4 = change_plan_cost(target_lane);
-    printf("Change plan cost: %f\n\n", cost4);
-    double total_cost = cost1 + cost2 + cost3 + cost4;
-    printf("total cost: %f\n\n", total_cost);
-    if (total_cost < min_cost) {
-      min_cost = total_cost;
-      best_iter = iter;
+    if (!trajectory[0].empty() && !!trajectory[1].empty()) {
+      double cost1 = collision_cost(trajectory);
+      printf("collision cost: %f\n", cost1);
+      double cost2 = lane_change_cost(target_lane);
+      printf("change lane cost: %f\n", cost2);
+      double cost3 = speed_limit_cost(target_lane, trajectory);
+      printf("speed cost: %f\n", cost3);
+      double cost4 = change_plan_cost(target_lane);
+      printf("Change plan cost: %f\n\n", cost4);
+      double total_cost = cost1 + cost2 + cost3 + cost4;
+      printf("total cost: %f\n\n", total_cost);
+      if (total_cost < min_cost) {
+        min_cost = total_cost;
+        best_iter = iter;
+      }
+    } else {
+      printf("Lane %d is empty!\n", target_lane);
     }
   }
   vector<vector<double>> &trajectory_sd = best_iter->second;
@@ -353,8 +355,8 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   double prev_s = s_;
   const int record_size = 10;
   list<vector<double>> record;
-  // bool use_smooth = true;
-  bool use_smooth = false;
+  bool use_smooth = true;
+  // bool use_smooth = false;
   for (int i = 0; i < trajectory_sd[0].size(); ++i) {
     double s = trajectory_sd[0][i];
     double d = trajectory_sd[1][i];
@@ -677,20 +679,17 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     const double time_lv_1 = 1.5;
     const double time_lv_2 = 3.0;
     const double time_lv_3 = 4.0;
-
     const double buffer = 25.0;
-    double vehicle_s1 = vehicle.s_ + vehicle.speed_ * time_lv_1;
-    double vehicle_s2 = vehicle.s_ + vehicle.speed_ * time_lv_2;
-    double vehicle_s3 = vehicle.s_ + vehicle.speed_ * time_lv_3;
-    double ego_s1 = s_ + speed_ * time_lv_1 + 25.0;
-    double ego_s2 = s_ + speed_ * time_lv_2 + 25.0;
-    double ego_s3 = s_ + speed_ * time_lv_3 + 25.0;
-    vehicle_s1 = round_frenet_s(vehicle.s_ + vehicle.speed_ * time_lv_1, MAX_S);
-    vehicle_s2 = round_frenet_s(vehicle.s_ + vehicle.speed_ * time_lv_2, MAX_S);
-    vehicle_s3 = round_frenet_s(vehicle.s_ + vehicle.speed_ * time_lv_3, MAX_S);
-    ego_s1 = round_frenet_s(s_ + speed_ * time_lv_1 + buffer, MAX_S);
-    ego_s2 = round_frenet_s(s_ + speed_ * time_lv_2 + buffer, MAX_S);
-    ego_s3 = round_frenet_s(s_ + speed_ * time_lv_3 + buffer, MAX_S);
+
+    double vehicle_s1 =
+        round_frenet_s(vehicle.s_ + vehicle.speed_ * time_lv_1, MAX_S);
+    double vehicle_s2 =
+        round_frenet_s(vehicle.s_ + vehicle.speed_ * time_lv_2, MAX_S);
+    double vehicle_s3 =
+        round_frenet_s(vehicle.s_ + vehicle.speed_ * time_lv_3, MAX_S);
+    double ego_s1 = round_frenet_s(s_ + speed_ * time_lv_1 + buffer, MAX_S);
+    double ego_s2 = round_frenet_s(s_ + speed_ * time_lv_2 + buffer, MAX_S);
+    double ego_s3 = round_frenet_s(s_ + speed_ * time_lv_3 + buffer, MAX_S);
     printf("ego, 1: %f, 2: %f, 3: %f\n", ego_s1, ego_s2, ego_s3);
     printf("id_%d, 1: %f, 2: %f, 3: %f\n", vehicle.id_, vehicle_s1, vehicle_s2,
            vehicle_s3);
@@ -705,10 +704,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
       end_s[1] = std::min(end_s[1], vehicle.speed_);
     }
   }
-  end_s[2] = 0.0;
-  /* if (start_s[1] < 10.0) {
-    end_s[2] = 5.0;
-  } */
+  // end_s[2] = 0.0;
   // end_d[2] = 0.0;
   // printf("s, start: %f, %f, %f\n", start_s[0], start_s[1], start_s[2]);
   // printf("s: end: %f, %f, %f\n", end_s[0], end_s[1], end_s[2]);
@@ -730,8 +726,6 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     }
   }
 
-  // printf("candidate_s_jmt_params size: %u\n", candidate_s_jmt_params.size());
-  // printf("candidate_d_jmt_params size: %u\n", candidate_d_jmt_params.size());
   if (!candidate_s_jmt_params.empty() && !candidate_d_jmt_params.empty()) {
     // Choose the best jmt_s_params
     int best_s_idx = 0;
@@ -777,7 +771,13 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
       trajectory_s.push_back(s);
       trajectory_d.push_back(d);
     }
+  } else {
+    printf("No available trajectory on lane :d\n", target_lane);
+    cout << "Candidate s_jmt: " << candidate_s_jmt_params.size() << endl;
+    cout << "Candidate d_jmt: " << candidate_d_jmt_params.size() << endl;
   }
+  trajectory_s.clear();
+  trajectory_d.clear();
 
   return {trajectory_s, trajectory_d};
 }
