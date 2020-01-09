@@ -88,15 +88,6 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   next_x_vals.clear();
   next_y_vals.clear();
 
-  /* if (traffics.size() > 0) {
-    cout << "Traffic: " << traffics.size() << endl;
-    for (Vehicle each : traffics) {
-      each.show_info();
-    }
-  }
-  cout << "We are in " << get_lane_from_d(d_) << " lane"
-       << ", s: " << s_ << ", d: " << d_ << endl; */
-
   // Generate traffic prediction
   std::unordered_map<int, vector<vector<double>>> predictions;
   for (auto iter = traffics.begin(); iter != traffics.end(); ++iter) {
@@ -111,7 +102,7 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
   if (lane_ == 0) {
     target_lanes.push_back(lane_);
     target_lanes.push_back(lane_ + 1);
-  } else if (lane_ == LANE_AVAILABLE) {
+  } else if (lane_ == LANE_AVAILABLE - 1) {
     target_lanes.push_back(lane_ - 1);
     target_lanes.push_back(lane_);
   } else {
@@ -223,7 +214,7 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     int target_lane = iter->first;
     vector<vector<double>> &trajectory = iter->second;
     printf("Check lane: %d\n", target_lane);
-    if (!trajectory[0].empty() && !!trajectory[1].empty()) {
+    if (!trajectory[0].empty() && !trajectory[1].empty()) {
       double cost1 = collision_cost(trajectory);
       printf("collision cost: %f\n", cost1);
       double cost2 = lane_change_cost(target_lane);
@@ -776,8 +767,6 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     cout << "Candidate s_jmt: " << candidate_s_jmt_params.size() << endl;
     cout << "Candidate d_jmt: " << candidate_d_jmt_params.size() << endl;
   }
-  trajectory_s.clear();
-  trajectory_d.clear();
 
   return {trajectory_s, trajectory_d};
 }
