@@ -170,45 +170,6 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s,
   double y = seg_y + d * sin(perp_heading);
 
   return {x, y};
-
-  // Spline version
-  /* const double max_s = 6945.554;
-  const int wp_size = maps_s.size();
-  int prev_wp = -1;
-  while (s > maps_s[prev_wp + 1] && (prev_wp < wp_size)) {
-    ++prev_wp;
-  }
-
-  int wp2 = (prev_wp + 1) % maps_x.size();
-  const double theta =
-      atan2((maps_y[wp2] - maps_y[prev_wp]), (maps_x[wp2] - maps_x[prev_wp]));
-  const double x0 = maps_x[prev_wp];
-  const double y0 = maps_y[prev_wp];
-  const double x1 = maps_x[wp2];
-  const double y1 = maps_y[wp2];
-  const double dist = distance(x0, y0, x1, y1);
-  const double cos_theta = std::cos(theta);
-  const double sin_theta = std::sin(theta);
-
-  if (wp_spline_func.find(prev_wp) == wp_spline_func.end()) {
-    generate_wp_spline_fuc(maps_x, maps_y);
-  }
-  auto spline_func = wp_spline_func[prev_wp];
-
-  double s_ratio = s_distance(s, maps_s[prev_wp], max_s) /
-                   s_distance(maps_s[wp2], maps_s[prev_wp], max_s);
-  // printf("s_ratio: %f, dist: %f\n", s_ratio, dist);
-  double local_x = dist * s_ratio;
-  double local_y = spline_func(local_x);
-  // printf("local xy: %f, %f\n", local_x, local_y);
-  // double theta1 = atan2(local_y, local_x);
-  // printf("theta1: %f, deriv: %f\n", theta1, spline_func.deriv(1, local_x));
-  double nx = maps_dx[prev_wp] + s_ratio * (maps_dx[wp2] - maps_dx[prev_wp]);
-  double ny = maps_dy[prev_wp] + s_ratio * (maps_dy[wp2] - maps_dy[prev_wp]);
-  double global_x = x0 + local_x * cos_theta - local_y * sin_theta + d * nx;
-  double global_y = y0 + local_x * sin_theta + local_y * cos_theta + d * ny;
-
-  return {global_x, global_y}; */
 }
 
 // Convert mile/hour to meter/second

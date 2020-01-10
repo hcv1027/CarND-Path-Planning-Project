@@ -19,18 +19,14 @@
 class Vehicle {
   // Define limitation conditions
   static const double MAX_VEL;   // Unit: 22.0 m/s
-  static const double MIN_VEL;   // Unit: 10.0 m/s
   static const double MAX_ACC;   // Unit: 10.0 m/s^2
   static const double MAX_JERK;  // Unit: 210.0 m/s^3
   // Define some constant environment variables
-  static const double VEHICLE_RADIUS;  // Unit: 5.0 m
   static const int LANE_AVAILABLE = 3;
   static const double MAX_S;
   static const double HALF_MAX_S;
   static const double LANE_WIDTH;  // Unit: 4.0 m
-  static const double COLLISION_THRESHOLD;
   // Define some useful constant values
-  static const int PREV_PATH_REUSE = 20;
   static const double PREDICTION_TIME;
   static const double TIME_STEP;
   static const int TOTAL_STEP;
@@ -43,7 +39,6 @@ class Vehicle {
   double d_;
   double yaw_;
   double speed_;  // Unit: m/s
-  bool debug_;
   std::vector<double> prev_trajectory_s_;
   std::vector<double> prev_trajectory_d_;
   // Used by other vehicle detected by sensor
@@ -52,7 +47,6 @@ class Vehicle {
   int lane_;
   int target_lane_;
 
-  std::vector<tk::spline> global_splines;
   std::unordered_map<int, tk::spline> wp_spline_func_;
   std::vector<double> map_waypoints_x_;
   std::vector<double> map_waypoints_y_;
@@ -85,7 +79,6 @@ class Vehicle {
                                    const std::vector<double> &maps_y,
                                    const std::vector<double> &maps_dx,
                                    const std::vector<double> &maps_dy);
-  void generate_splines();
   void generate_wp_spline_fuc(const std::vector<double> &maps_x,
                               const std::vector<double> &maps_y);
 

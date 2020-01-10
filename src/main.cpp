@@ -53,7 +53,6 @@ int main() {
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
-  // generate_wp_spline_fuc(wp_spline_func, map_waypoints_x, map_waypoints_y);
 
   // Initialize out ego vehicle
   Vehicle ego_vehicle;
@@ -85,22 +84,18 @@ int main() {
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];  // Unit is MPH
-          std::cout << "--------------------" << std::endl;
-          printf("curr xy: (%f, %f), speed: %f\n", car_x, car_y,
-                 mph2ms(car_speed));
 
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
           auto previous_path_y = j[1]["previous_path_y"];
-          std::vector<std::vector<double>> prev_path;
+          /* std::vector<std::vector<double>> prev_path;
           for (int i = 0; i < previous_path_x.size(); ++i) {
             std::vector<double> point;
             point.push_back(previous_path_x[i]);
             point.push_back(previous_path_y[i]);
             prev_path.push_back(point);
-          }
+          } */
 
-          // std::cout << "prev_path size: " << prev_path.size() << std::endl;
           // Previous path's end s and d values
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
@@ -110,26 +105,18 @@ int main() {
           auto sensor_fusion = j[1]["sensor_fusion"];
           unordered_map<int, Vehicle> traffics;
           for (auto each : sensor_fusion) {
-            // The max speed is 50 MPH = 22.352 meter/second.
-            // I'll predict the vehicle's trajectory in 3 seconds.
-            // 3 * 22.352 = 67.056, So I set MAX_DISTANCE = 68.0.
-            const double MAX_DISTANCE = 120.0;
             int id = each[0];
             double x = each[1];
             double y = each[2];
             double x_vel = each[3];
             double y_vel = each[4];
-            // double speed = std::sqrt(x_vel * x_vel + y_vel * y_vel);
             double s = each[5];
             double d = each[6];
-            // int lane = get_lane_from_d(d);
-            double dis = distance(car_x, car_y, x, y);
-            if (/* lane >= 0 &&  */ dis <= MAX_DISTANCE) {
-              Vehicle vehicle(id, x, y, x_vel, y_vel, s, d);
-              vehicle.set_map(map_waypoints_x, map_waypoints_y, map_waypoints_s,
-                              map_waypoints_dx, map_waypoints_dy);
-              traffics.insert(std::make_pair(id, vehicle));
-            }
+
+            Vehicle vehicle(id, x, y, x_vel, y_vel, s, d);
+            vehicle.set_map(map_waypoints_x, map_waypoints_y, map_waypoints_s,
+                            map_waypoints_dx, map_waypoints_dy);
+            traffics.insert(std::make_pair(id, vehicle));
           }
 
           json msgJson;
@@ -141,12 +128,13 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+          std::cout << "--------------------" << std::endl;
+          printf("xy: (%f, %f), speed: %f, prev_path: %d\n", car_x, car_y,
+                 mph2ms(car_speed), previous_path_x.size());
           ego_vehicle.update_state(car_x, car_y, car_s, car_d, deg2rad(car_yaw),
                                    mph2ms(car_speed));
           ego_vehicle.get_trajectory(next_x_vals, next_y_vals,
                                      previous_path_x.size(), traffics);
-          // next_x_vals.clear();
-          // next_y_vals.clear();
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
