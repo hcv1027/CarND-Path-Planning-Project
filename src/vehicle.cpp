@@ -494,7 +494,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     start_d[2] = d_acc_0;
   }
 
-  end_s[0] = s_ + 100.0;
+  end_s[0] = start_s[0] + 100.0;
   end_s[1] = MAX_VEL;
   end_d[0] = (target_lane + 0.5) * LANE_WIDTH;
   if (target_lane != lane_) {
@@ -612,6 +612,10 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     printf("No available trajectory on lane : %d\n", target_lane);
     cout << "Candidate s_jmt: " << candidate_s_jmt_params.size() << endl;
     cout << "Candidate d_jmt: " << candidate_d_jmt_params.size() << endl;
+    printf("s, start: %f, %f, %f\n", start_s[0], start_s[1], start_s[2]);
+    printf("s: end: %f, %f, %f\n", end_s[0], end_s[1], end_s[2]);
+    printf("d, start: %f, %f, %f\n", start_d[0], start_d[1], start_d[2]);
+    printf("d: end: %f, %f, %f\n\n", end_d[0], end_d[1], end_d[2]);
   }
 
   return {trajectory_s, trajectory_d};
