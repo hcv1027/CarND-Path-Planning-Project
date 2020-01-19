@@ -94,6 +94,7 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
 
   // Generate all possible trajectory
   vector<int> target_lanes;
+  std::unordered_map<int, vector<vector<double>>> trajectories;
   if (lane_ == 0) {
     target_lanes.push_back(lane_);
     target_lanes.push_back(lane_ + 1);
@@ -105,8 +106,6 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     target_lanes.push_back(lane_);
     target_lanes.push_back(lane_ + 1);
   }
-
-  std::unordered_map<int, vector<vector<double>>> trajectories;
   for (int i = 0; i < target_lanes.size(); ++i) {
     int target_lane = target_lanes[i];
     trajectories.insert(std::make_pair(
@@ -130,7 +129,7 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
         if (ego_lane == vehicle_lane && s_dist <= 25.0) {
           printf("Predict collision, id: %d, time: %f, s0: %f, s1: %f\n",
                  iter->first, (i + 1) * TIME_STEP, s0, s1);
-          return 100.0;
+          return 150.0;
         }
       }
     }
@@ -141,7 +140,7 @@ void Vehicle::get_trajectory(std::vector<double> &next_x_vals,
     if (target_lane == lane_) {
       return 0.0;
     }
-    const double dangerous_dist = 20.0;
+    const double dangerous_dist = 25.0;
     int id_behind = get_vehicle_behind(target_lane, traffics);
     int id_ahead = get_vehicle_ahead(target_lane, traffics);
     bool dangerous = false;
@@ -433,13 +432,13 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     return true;
   };
 
+  // Decide to keep how many parts of the previous trajectory.
   const int vehicle_ahead_id = get_vehicle_ahead(target_lane, traffics);
-  const int vehicle_behind_id = get_vehicle_behind(target_lane, traffics);
   vector<double> trajectory_s;
   vector<double> trajectory_d;
   int keep_prev_size = 50;
   if (target_lane != lane_) {
-    keep_prev_size = 25;
+    keep_prev_size = 5;
   } else if (vehicle_ahead_id >= 0) {
     Vehicle &ahead = traffics[vehicle_ahead_id];
     const double s_dist = s_distance(s_, ahead.s_, MAX_S);
@@ -462,6 +461,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     trajectory_d.insert(trajectory_d.begin(), d_start, d_end);
   }
 
+  // Decide the start and end points in the frenet coordinate.
   vector<double> start_s(3, 0.0);
   vector<double> end_s(3, 0.0);
   vector<double> start_d(3, 0.0);
@@ -507,9 +507,13 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
       // end_d[2] *= -1.0;
     }
   } else {
-    end_d[1] = 0.1;
+    end_d[1] = 0.0;
     end_d[2] = 0.0;
   }
+
+  // Change the end speed of the trajectory according to below conditions:
+  // Is there is a vehicle in front of mine?
+  // How long will we collide?
   printf("generate lane: %d\n", target_lane);
   if (vehicle_ahead_id >= 0) {
     Vehicle &vehicle = traffics[vehicle_ahead_id];
@@ -550,6 +554,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
   // printf("d: end: %f, %f, %f\n\n", end_d[0], end_d[1], end_d[2]);
   printf("\n");
 
+  // Compute the jmt parameters according to different duration
   vector<vector<double>> candidate_s_jmt_params;
   vector<vector<double>> candidate_d_jmt_params;
   for (double dt = 0.1; dt <= 20.0; dt += 0.1) {
@@ -564,6 +569,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     }
   }
 
+  // Choose the best solution jmt parameters as the final one.
   if (!candidate_s_jmt_params.empty() && !candidate_d_jmt_params.empty()) {
     // Choose the best jmt_s_params
     int best_s_idx = 0;
@@ -581,7 +587,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
     }
     vector<double> &final_s_coeffs = candidate_s_jmt_params[best_s_idx];
 
-    // Choose the best jmt_s_params
+    // Choose the best jmt_d_params
     int best_d_idx = 0;
     double min_target_d_speed_diff = std::numeric_limits<double>::infinity();
     for (int i = 0; i < candidate_d_jmt_params.size(); ++i) {
@@ -609,6 +615,7 @@ std::vector<std::vector<double>> Vehicle::generate_trajectory(
       trajectory_d.push_back(d);
     }
   } else {
+    // So sad, print the log for debugging.
     printf("No available trajectory on lane : %d\n", target_lane);
     cout << "Candidate s_jmt: " << candidate_s_jmt_params.size() << endl;
     cout << "Candidate d_jmt: " << candidate_d_jmt_params.size() << endl;

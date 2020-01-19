@@ -1,6 +1,64 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
-   
+
+### Description
+
+It is my project of **Udacity's Self-Driving Car Engineer Nanodegree Program: Highway driving**. I will describe my implementation briefly here.<p>
+
+#### Generate trajectory
+
+I use the **jerk minization trajectory** method introduced in the **Trajectory Generation** course to generate my trajectory in the `frenet coordinate`. It is implemented in the function `Vehicle::generate_trajectory()`. For the reason to let my vehicle drives smoothly, I keep some part of previously unused trajectory, the length is decided according to some different conditions: Change lane or keep lane? Is there any vehicle in front of my vehicle? if yes, what's the distance between this vehicle and mine? You can check this part in the code after the comment:
+``` c++
+// Decide to keep how many parts of the previous trajectory.
+```
+
+Then choose the desired start and end points in the frenet coordinate. I choose the end speed according to the conditions of is there any vehicle in front of mine, and is it possible to collide it. You can check this part in the code after the comment:
+``` c++
+  // Change the end speed of the trajectory according to below conditions:
+  // Is there a vehicle in front of mine?
+  // How long will we collide?
+```
+
+Next step is to compute the jmt parameters of `s` and `d` according to several different durations, and check whether or not they will violate the limitations, if not, add to the candidate list. You can check this part in the code after the comment:
+```c++
+// Compute the jmt parameters according to different duration
+```
+
+The final jmt step is to choose the one from above candidate jmt parameters list, and generate the `s` and `d` trajectories. You can check this part in the code after the comment:
+```c++
+// Choose the best solution jmt parameters as the final one.
+```
+
+#### Choose trajectory to follow
+
+Choosing the next trajectory is in the function `Vehicle::get_trajectory()`. When the vehicle is in the left or right lane, I generate two trajectory, one trajectory is following current lane, the other is change to the neighbor lane.  As the vehicle is in the middle lane, I generate three trajectories, one for following current lane, the other two are changing to left and right lane respectively. Then I call the `Vehicle::generate_trajectory()` to generate each candidate trajectories.  You can check this part in the code after the comment:
+```c++
+// Generate all possible trajectory
+```
+
+After I have candidate trajectories, I use several cost functions to decide which trajectory has lowest cost. There are four cost functions:
+1. Collision cost: Check whether or not the candidate trajectory will have a collision accident by using the **sensor fusion** data. (In lambda function: `auto collision_cost`)
+2. Change lane cost: A cost for the trajectory which will change the lane. (In lambda function: `auto lane_change_cost`)
+3. Speed limit cost: When there is a vehicle in front of my vehicle in the candidate trajectory, I use this cost to decide should I choose this trajectory. If the vehicle in candidate trajectory is slower then the vehicle in my current lane, I prefer do not change the lane.  (In lambda function: `auto speed_limit_cost`)
+4. Change plan cost: I use this cost to penalize the behavior of changing to another lane during the process of changing lane. For example, my vehicle is in left lane and it decides to change to the middle lane, but in next time it decides to change back to the left lane as the change process is not completed yet. (In lambda function: `auto change_plan_cost`)
+
+You can check the cost function part in the code after the comment:
+```c++
+// Compute the cost of each trajectory
+```
+
+#### Smooth the final trajectory
+
+Because my trajectory is in `Frenet coordinate`, I have to transfer them into `Cartesian coordinates` before I send it to simulator. But I found there is a discontinuous problem here. The example is like below one:
+![discontinuous point](./image/smooth_point.png)
+
+I use the [spline function](http://kluge.in-chemnitz.de/opensource/spline/) to smooth this part. You  can find the code in the function `Vehicle::getXY_smooth`.
+
+#### Final video
+Here is [the video]( https://youtu.be/YCJSyWzYx-Q) of my final result. Enjoy it!
+
+---
+
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).  
 
