@@ -57,6 +57,9 @@ I use the [spline function](http://kluge.in-chemnitz.de/opensource/spline/) to s
 #### Final video
 Here is [the video]( https://youtu.be/YCJSyWzYx-Q) of my final result. Enjoy it!
 
+#### Reference
+[自动驾驶路径规划技术-高速公路路径规划](https://zhuanlan.zhihu.com/p/128516264)
+
 ---
 
 ### Simulator.
